@@ -1,6 +1,25 @@
+# Secrets / local env
 .env
 
+# Sibling repo lives alongside this one on disk but is tracked separately on GitHub
 /observability-sample-app/
-/observability-sample-app/*
 
+# Local plan document (intentionally not version-controlled)
 plan.md
+
+# Kubeconfig dumps / cluster credentials accidentally saved locally
+kubeconfig*
+*.kubeconfig
+
+# IaC local state, if introduced later
+.terraform/
+*.tfstate
+*.tfstate.*
+
+# OS junk files
+.DS_Store
+Thumbs.db
+
+# Editor/IDE
+.vscode/
+.idea/
