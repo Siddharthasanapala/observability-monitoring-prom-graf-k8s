@@ -1,0 +1,48 @@
+# Namespace sizing rationale (Phase 3):
+# Cluster budget is 4 CPU / 8192Mi (Phase 1). ~1 CPU / ~1.5Gi is reserved outside these
+# quotas for kube-system, ingress-nginx, and argocd. The remaining ~3 CPU / ~6.5Gi is
+# split across the four tenant namespaces below, weighted toward `observability` since
+# Phase 5 deploys HA Prometheus + Grafana + Alertmanager here (the heaviest workload).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability
+  labels:
+    app.kubernetes.io/part-of: observability-platform
+    observability.io/component: metrics
+    observability.io/tenant: platform-team
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: observability-quota
+  namespace: observability
+spec:
+  hard:
+    requests.cpu: "2"
+    requests.memory: 4Gi
+    limits.cpu: "3"
+    limits.memory: 6Gi
+    persistentvolumeclaims: "10"
+    pods: "30"
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: observability-limits
+  namespace: observability
+spec:
+  limits:
+    - type: Container
+      defaultRequest:
+        cpu: 200m
+        memory: 256Mi
+      default:
+        cpu: 500m
+        memory: 512Mi
+      min:
+        cpu: 50m
+        memory: 64Mi
+      max:
+        cpu: "2"
+        memory: 4Gi
