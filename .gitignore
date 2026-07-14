@@ -1,0 +1,6 @@
+.env
+
+/observability-sample-app/
+/observability-sample-app/*
+
+plan.md
