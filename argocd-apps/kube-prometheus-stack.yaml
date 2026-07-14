@@ -1,0 +1,31 @@
+# Phase 5 — Metrics stack, GitOps-managed via the root App-of-Apps.
+# Multi-source Application: the Helm chart comes straight from the prometheus-community
+# repo (pinned version), values come from this git repo (aliased $values below) — so the
+# chart itself is never vendored/forked, only our configuration is.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: 87.15.2
+      helm:
+        valueFiles:
+          - $values/manifests/kube-prometheus-stack/values.yaml
+    - repoURL: https://github.com/Siddharthasanapala/observability-monitoring-prom-graf-k8s.git
+      targetRevision: siddhu
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+      - ServerSideApply=true   # kube-prometheus-stack ships large CRDs — same fix as ArgoCD (Phase 2) and cert-manager (Phase 4)

@@ -30,6 +30,46 @@ spec:
         - {protocol: UDP, port: 53}
         - {protocol: TCP, port: 53}
 ---
+# Found via a real failed deployment (Phase 5 kube-prometheus-stack's admission-create hook
+# timed out reaching the API server): default-deny-all blocks egress to the Kubernetes API
+# server itself unless explicitly allowed. Many workloads need this (operator hooks,
+# Promtail's Kubernetes service discovery in Phase 6, etc.), so it's a baseline rule here.
+#
+# Empirically debugged (this was NOT a one-line guess): targeting the `kubernetes.default.svc`
+# ClusterIP (10.96.0.1/32) via ipBlock silently timed out even though the rule looked correct;
+# targeting the kube-apiserver Pod via podSelector/namespaceSelector *also* timed out, because
+# kube-apiserver runs with hostNetwork: true (it's not on the pod overlay network at all).
+# Root cause: kube-proxy DNATs ClusterIP -> node IP *before* Calico evaluates egress policy on
+# this cluster, so the ipBlock must target the post-DNAT node IP. Confirmed by testing directly
+# against the node IP, which succeeded. 192.168.49.2 is this Minikube node's InternalIP
+# (`kubectl get nodes -o wide`) — this is environment-specific and WILL be wrong after any
+# cluster rebuild with a different Docker network, and does not translate to GKE/EKS at all
+# (their control planes aren't cluster nodes/pods) — must be redesigned in Phases 12-13.
+#
+# Same root cause hit Prometheus's own ServiceMonitor scrape targets: node-exporter (port
+# 9100, moved to kube-system in Phase 5 for PSS reasons) and kubelet (port 10250, /metrics +
+# /metrics/cadvisor + /metrics/probes) both run hostNetwork: true, so they needed the same
+# node-IP treatment — found by checking `curl` from a live pod timed out on both ports.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-node-metrics-egress
+  namespace: observability
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 192.168.49.2/32
+      ports:
+        - {protocol: TCP, port: 8443}   # kube-apiserver
+        - {protocol: TCP, port: 9100}   # node-exporter
+        - {protocol: TCP, port: 10250}  # kubelet (/metrics, /metrics/cadvisor, /metrics/probes)
+        - {protocol: TCP, port: 10249}  # kube-proxy (binds 0.0.0.0, genuinely reachable — unlike
+                                         # scheduler/controller-manager/etcd below, which Minikube
+                                         # hardcodes to 127.0.0.1 and no NetworkPolicy can reach)
+---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

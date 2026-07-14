@@ -25,6 +25,24 @@ spec:
         - {protocol: UDP, port: 53}
         - {protocol: TCP, port: 53}
 ---
+# See manifests/network-policies/observability.yaml for the full debugging story on why this
+# targets the node IP (192.168.49.2, Minikube-specific) at port 8443 rather than the ClusterIP.
+# Promtail (Phase 6) uses Kubernetes API service discovery, so this namespace needs it too.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-apiserver-egress
+  namespace: logging
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 192.168.49.2/32
+      ports:
+        - {protocol: TCP, port: 8443}
+---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
