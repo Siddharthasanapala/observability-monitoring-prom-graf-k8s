@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-bootstrap-check
+  namespace: argocd
+data:
+  note: "Phase 2 GitOps bootstrap validation placeholder. Proves root-app -> child-app -> resource sync works. Safe to delete once Phase 3+ child Applications land."

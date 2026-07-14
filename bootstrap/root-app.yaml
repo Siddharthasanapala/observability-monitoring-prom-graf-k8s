@@ -1,0 +1,28 @@
+# Phase 2 — App-of-Apps root Application.
+# This is the single manifest applied by hand (ArgoCD's own bootstrap seed).
+# Everything else in argocd-apps/ is picked up automatically from Git by this Application
+# and reconciled by ArgoCD — no further `kubectl apply` for cluster state from this point on.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-app-of-apps
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Siddharthasanapala/observability-monitoring-prom-graf-k8s.git
+    targetRevision: siddhu
+    path: argocd-apps
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

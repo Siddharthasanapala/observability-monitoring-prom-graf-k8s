@@ -1,0 +1,25 @@
+# Phase 2 validation placeholder — proves the App-of-Apps two-level sync mechanism
+# (root-app -> this child Application -> real resource) works end-to-end.
+# Safe to delete once Phase 3+ child Applications (namespaces, kube-prometheus-stack, etc.) land.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: bootstrap-placeholder
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Siddharthasanapala/observability-monitoring-prom-graf-k8s.git
+    targetRevision: siddhu
+    path: bootstrap/placeholder
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
