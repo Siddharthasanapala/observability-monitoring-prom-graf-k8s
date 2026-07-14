@@ -1,0 +1,73 @@
+# Ports: 4317/4318 = OTLP gRPC/HTTP ingest (OTel Collector / Tempo distributor default).
+# 3200 = Tempo's default query API.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: tracing
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: tracing
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-intra-namespace
+  namespace: tracing
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from: [{podSelector: {}}]
+  egress:
+    - to: [{podSelector: {}}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-otlp-ingest-from-demo-app
+  namespace: tracing
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              observability.io/tenant: app-team
+      ports:
+        - {protocol: TCP, port: 4317}
+        - {protocol: TCP, port: 4318}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-query-ingress-from-observability
+  namespace: tracing
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              observability.io/component: metrics   # Grafana querying Tempo
+      ports:
+        - {protocol: TCP, port: 3200}

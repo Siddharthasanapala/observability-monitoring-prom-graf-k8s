@@ -1,0 +1,81 @@
+# Phase 4 NetworkPolicy — default-deny with explicit allows for scrape/query/ingest traffic.
+# Port numbers (3000 Grafana, 9090 Prometheus, 9093 Alertmanager) are the well-known defaults
+# for kube-prometheus-stack (Phase 5). If Phase 5's Helm values change them, these must be updated.
+# podSelector: {} is used deliberately (matches all pods in the namespace) rather than guessing
+# exact chart-generated pod labels before Phase 5 exists — namespace boundaries are the primary
+# control here; tighten to specific pod labels once the real chart is deployed if needed.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: observability
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: observability
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-intra-namespace
+  namespace: observability
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from: [{podSelector: {}}]
+  egress:
+    - to: [{podSelector: {}}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ui-ingress-from-ingress-nginx
+  namespace: observability
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - {protocol: TCP, port: 3000}  # Grafana
+        - {protocol: TCP, port: 9090}  # Prometheus (direct UI access, optional)
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-scrape-egress
+  namespace: observability
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              observability.io/tenant: platform-team   # logging, tracing
+        - namespaceSelector:
+            matchLabels:
+              observability.io/tenant: app-team         # demo-app
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system  # node/kubelet metrics

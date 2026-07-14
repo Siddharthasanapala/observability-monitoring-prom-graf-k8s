@@ -1,0 +1,32 @@
+# Phase 4 — security-related resources beyond RBAC/NetworkPolicy (currently: the self-signed
+# ClusterIssuer). Depends on the cert-manager Application's CRDs existing first; ArgoCD will
+# retry automatically if this syncs before cert-manager is ready, so a transient first-sync
+# failure here is expected and self-resolves on the next reconciliation.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: security
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Siddharthasanapala/observability-monitoring-prom-graf-k8s.git
+    targetRevision: siddhu
+    path: manifests/security
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 5
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 3m

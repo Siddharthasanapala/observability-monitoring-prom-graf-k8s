@@ -3,6 +3,13 @@
 # quotas for kube-system, ingress-nginx, and argocd. The remaining ~3 CPU / ~6.5Gi is
 # split across the four tenant namespaces below, weighted toward `observability` since
 # Phase 5 deploys HA Prometheus + Grafana + Alertmanager here (the heaviest workload).
+#
+# Phase 4: `restricted` Pod Security Standard enforced via namespace labels below.
+# KNOWN FRICTION FOR PHASE 5: kube-prometheus-stack's node-exporter DaemonSet needs
+# hostNetwork/hostPID/hostPath (to read host /proc,/sys) which `restricted` forbids
+# outright. When Phase 5 lands, node-exporter will need to run in a separate,
+# less-restricted namespace (e.g. kube-system) — it cannot run inside `observability`
+# as labeled here. Flagging now so it isn't a surprise mid-Phase-5.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -11,6 +18,10 @@ metadata:
     app.kubernetes.io/part-of: observability-platform
     observability.io/component: metrics
     observability.io/tenant: platform-team
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
 ---
 apiVersion: v1
 kind: ResourceQuota

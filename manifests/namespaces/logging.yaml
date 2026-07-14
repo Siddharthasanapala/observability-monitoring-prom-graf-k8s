@@ -1,3 +1,8 @@
+# Phase 4: `restricted` Pod Security Standard enforced via namespace labels below.
+# KNOWN FRICTION FOR PHASE 6: Promtail's DaemonSet needs hostPath mounts (/var/log/pods,
+# container runtime log dirs) to tail node logs, which `restricted` forbids. Loki itself
+# (no host access needed) is fine under `restricted`; Promtail will need a namespace
+# exception or a hostPath-tolerant PSS level when Phase 6 lands.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -6,6 +11,10 @@ metadata:
     app.kubernetes.io/part-of: observability-platform
     observability.io/component: logs
     observability.io/tenant: platform-team
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
 ---
 apiVersion: v1
 kind: ResourceQuota

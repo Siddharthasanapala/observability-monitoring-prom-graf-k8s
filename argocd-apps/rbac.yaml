@@ -1,0 +1,21 @@
+# Phase 4 — RBAC baseline, GitOps-managed via the root App-of-Apps.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: rbac
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Siddharthasanapala/observability-monitoring-prom-graf-k8s.git
+    targetRevision: siddhu
+    path: manifests/rbac
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

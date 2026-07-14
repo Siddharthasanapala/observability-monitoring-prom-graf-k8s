@@ -1,3 +1,6 @@
+# Phase 4: `restricted` Pod Security Standard enforced via namespace labels below.
+# Tempo and the OTel Collector need no host access, so both should run cleanly under
+# `restricted` — no known friction here, unlike observability/logging's node-level agents.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -6,6 +9,10 @@ metadata:
     app.kubernetes.io/part-of: observability-platform
     observability.io/component: traces
     observability.io/tenant: platform-team
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
 ---
 apiVersion: v1
 kind: ResourceQuota

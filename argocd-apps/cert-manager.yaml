@@ -1,0 +1,27 @@
+# Phase 4 — cert-manager (self-signed issuer pattern), GitOps-managed via the root App-of-Apps.
+# ServerSideApply is required: cert-manager's CRDs are large enough to exceed the
+# kubectl.kubernetes.io/last-applied-configuration annotation size limit under a normal
+# apply, the same issue hit with ArgoCD's own install in Phase 2.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Siddharthasanapala/observability-monitoring-prom-graf-k8s.git
+    targetRevision: siddhu
+    path: manifests/cert-manager
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

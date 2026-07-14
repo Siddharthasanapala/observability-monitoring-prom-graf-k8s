@@ -1,0 +1,66 @@
+# See manifests/rbac/observability.yaml for the rationale on explicit resource enumeration
+# (a wildcarded core-group "*" would grant secrets read / quota write, which we don't want).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sre-viewer
+  namespace: logging
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "services", "endpoints", "configmaps", "events", "persistentvolumeclaims", "resourcequotas", "limitranges"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses", "networkpolicies"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sre-viewer-binding
+  namespace: logging
+subjects:
+  - kind: Group
+    name: sre-viewers
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: sre-viewer
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: observability-admin
+  namespace: logging
+rules:
+  # Deliberately NOT granted: rbac.authorization.k8s.io, resourcequotas, limitranges,
+  # networkpolicies — governance objects stay GitOps-only.
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "services", "endpoints", "configmaps", "secrets", "serviceaccounts", "events", "persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: observability-admin-binding
+  namespace: logging
+subjects:
+  - kind: Group
+    name: observability-admins
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: observability-admin
+  apiGroup: rbac.authorization.k8s.io

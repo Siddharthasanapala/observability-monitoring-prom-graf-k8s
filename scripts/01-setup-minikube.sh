@@ -3,6 +3,11 @@
 # Starts a Minikube cluster sized like a real environment (not `minikube start` defaults)
 # with the addons required for the observability stack: metrics-server, storage-provisioner,
 # default-storageclass (dynamic PVC provisioning), and ingress.
+#
+# --cni=calico amended during Phase 4: Minikube's default `bridge` CNI does not enforce
+# NetworkPolicy at all (proven via a live cross-namespace connectivity test through a
+# default-deny-all policy, which succeeded when it should have been blocked). Calico gives
+# real enforcement, matching how GKE (Dataplane V2) and EKS (Calico/VPC CNI) actually behave.
 set -euo pipefail
 
 PROFILE="minikube"
@@ -10,14 +15,16 @@ CPUS=4
 MEMORY=8192
 K8S_VERSION="v1.35.1" # pinned explicitly for reproducibility (resolved from 'stable' at time of writing)
 DRIVER="docker"
+CNI="calico"
 
-echo "==> Starting Minikube profile '${PROFILE}' (cpus=${CPUS}, memory=${MEMORY}MB, k8s=${K8S_VERSION}, driver=${DRIVER})"
+echo "==> Starting Minikube profile '${PROFILE}' (cpus=${CPUS}, memory=${MEMORY}MB, k8s=${K8S_VERSION}, driver=${DRIVER}, cni=${CNI})"
 minikube start \
   -p "${PROFILE}" \
   --cpus="${CPUS}" \
   --memory="${MEMORY}" \
   --kubernetes-version="${K8S_VERSION}" \
   --driver="${DRIVER}" \
+  --cni="${CNI}" \
   --addons=metrics-server \
   --addons=storage-provisioner \
   --addons=default-storageclass \

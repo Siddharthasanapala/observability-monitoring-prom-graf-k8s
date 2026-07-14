@@ -1,0 +1,11 @@
+# Minimal cert-manager pattern, provable on Minikube (Phase 4). A self-signed ClusterIssuer
+# is the simplest possible proof that cert-manager can issue certificates cluster-wide.
+# Cloud-native replacements (GCP Certificate Manager + Workload Identity / AWS ACM + IRSA,
+# and External Secrets / Sealed Secrets for secret management) are documented in Phases 12-13
+# rather than implemented here — those are cloud-IAM-adjacent, not something Minikube can model.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-issuer
+spec:
+  selfSigned: {}

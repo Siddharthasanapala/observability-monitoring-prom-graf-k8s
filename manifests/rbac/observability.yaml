@@ -1,0 +1,75 @@
+# Phase 4 RBAC — least-privilege personas, bound to Groups (not ServiceAccounts) so this
+# wires directly into a real IdP/OIDC group claim later without changing these manifests.
+# Resources are enumerated explicitly per apiGroup rather than wildcarded ("*") — a wildcard
+# on the core ("") group also matches secrets/resourcequotas/limitranges, which defeats the
+# "viewer can't read secrets" and "admin can't touch governance objects" intent below.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sre-viewer
+  namespace: observability
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "services", "endpoints", "configmaps", "events", "persistentvolumeclaims", "resourcequotas", "limitranges"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses", "networkpolicies"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["monitoring.coreos.com"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sre-viewer-binding
+  namespace: observability
+subjects:
+  - kind: Group
+    name: sre-viewers
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: sre-viewer
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: observability-admin
+  namespace: observability
+rules:
+  # Deliberately NOT granted: rbac.authorization.k8s.io (any resource), resourcequotas,
+  # limitranges, networkpolicies — these stay GitOps-only, not self-service for a namespace admin.
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "services", "endpoints", "configmaps", "secrets", "serviceaccounts", "events", "persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["monitoring.coreos.com"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: observability-admin-binding
+  namespace: observability
+subjects:
+  - kind: Group
+    name: observability-admins
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: observability-admin
+  apiGroup: rbac.authorization.k8s.io

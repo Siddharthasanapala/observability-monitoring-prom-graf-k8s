@@ -1,0 +1,76 @@
+# Port 8080 = assumed ASP.NET Core app port (HTTP + /metrics on the same port) — Phase 8
+# will confirm/adjust this once the real app and its Service are defined.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: demo-app
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: demo-app
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-intra-namespace
+  namespace: demo-app
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from: [{podSelector: {}}]
+  egress:
+    - to: [{podSelector: {}}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-http-ingress-from-ingress-nginx-and-prometheus
+  namespace: demo-app
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+        - namespaceSelector:
+            matchLabels:
+              observability.io/component: metrics   # Prometheus scraping /metrics
+      ports:
+        - {protocol: TCP, port: 8080}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-otlp-egress-to-tracing
+  namespace: demo-app
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              observability.io/component: traces
+      ports:
+        - {protocol: TCP, port: 4317}
+        - {protocol: TCP, port: 4318}
