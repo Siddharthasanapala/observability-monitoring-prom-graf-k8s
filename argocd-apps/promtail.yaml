@@ -1,0 +1,32 @@
+# Phase 6 — Promtail, GitOps-managed via the root App-of-Apps.
+# Separate Application from loki.yaml (not folded in as a second Helm source) because it needs
+# a different destination.namespace (kube-system, not logging) — see promtail-values.yaml for
+# why. ArgoCD Applications have one destination.namespace for all their sources, so two
+# genuinely different target namespaces means two Applications.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: promtail
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://grafana.github.io/helm-charts
+      chart: promtail
+      targetRevision: 6.17.1
+      helm:
+        valueFiles:
+          - $values/manifests/loki/promtail-values.yaml
+    - repoURL: https://github.com/Siddharthasanapala/observability-monitoring-prom-graf-k8s.git
+      targetRevision: siddhu
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+      - ServerSideApply=true

@@ -1,0 +1,23 @@
+# Phase 6 — Promtail (log shipping DaemonSet), GitOps-managed. Chart: grafana/promtail,
+# pinned to 6.17.1 (see argocd-apps/promtail.yaml).
+#
+# Deployed into `kube-system`, NOT `logging` — same reasoning as node-exporter in Phase 5:
+# Promtail's DaemonSet needs hostPath mounts (/var/log/pods, container runtime log dirs) to
+# tail node-local logs, which the `logging` namespace's `restricted` PSS (Phase 4) forbids
+# outright. This was flagged as a known conflict back when the namespace PSS labels were
+# added — kube-system has no PSS restriction, so Promtail runs there with its normal chart
+# defaults, no securityContext patching needed (unlike Loki, Prometheus, or Alertmanager).
+#
+# Standalone chart (no namespaceOverride key, unlike kube-prometheus-stack's node-exporter
+# subchart) — so this is registered as its OWN ArgoCD Application (argocd-apps/promtail.yaml)
+# with destination.namespace: kube-system, separate from argocd-apps/loki.yaml.
+
+config:
+  clients:
+    # Loki's gateway is disabled (see loki values.yaml), so Promtail pushes directly to the
+    # singleBinary service. Cross-namespace (kube-system -> logging), hence the FQDN.
+    - url: http://loki.logging.svc.cluster.local:3100/loki/api/v1/push
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 150m, memory: 128Mi}

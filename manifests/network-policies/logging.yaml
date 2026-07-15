@@ -27,7 +27,9 @@ spec:
 ---
 # See manifests/network-policies/observability.yaml for the full debugging story on why this
 # targets the node IP (192.168.49.2, Minikube-specific) at port 8443 rather than the ClusterIP.
-# Promtail (Phase 6) uses Kubernetes API service discovery, so this namespace needs it too.
+# NOTE (Phase 6): Promtail ended up deployed to kube-system, not logging (see
+# manifests/loki/promtail-values.yaml for why), so it doesn't actually need this rule — kept
+# here as baseline API access for whatever runs in `logging` directly.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -69,5 +71,24 @@ spec:
         - namespaceSelector:
             matchLabels:
               observability.io/component: metrics   # Grafana querying Loki
+      ports:
+        - {protocol: TCP, port: 3100}
+---
+# Promtail runs in kube-system (PSS conflict, see promtail-values.yaml) and pushes logs
+# directly to Loki's singleBinary service (gateway disabled) — needs its own ingress rule
+# distinct from the Grafana query rule above, since it comes from a different namespace.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-push-ingress-from-promtail
+  namespace: logging
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
       ports:
         - {protocol: TCP, port: 3100}

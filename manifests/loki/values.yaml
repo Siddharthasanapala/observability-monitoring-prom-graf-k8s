@@ -1,0 +1,72 @@
+# Phase 6 — Loki (logs), GitOps-managed. Chart: grafana/loki, pinned to 7.0.0 (see
+# argocd-apps/loki.yaml). Deployed into the `logging` namespace (Phase 4: `restricted` PSS).
+#
+# SingleBinary deployment mode (not the chart's default SimpleScalable) — a multi-component
+# read/write/backend topology is unnecessary complexity for this cluster's scale, and would
+# repeat Phase 5's per-container resource-sizing problem across even more pods. filesystem
+# storage (not S3/GCS) matches Phase 1's stand-in-for-cloud-storage approach; Phase 12-13 will
+# document GCS/S3 as the real enterprise-scale backend, same as noted in plan.md Section 4.
+#
+# Verified against the chart's own default values before writing this (Phase 5's lesson):
+# podSecurityContext/containerSecurityContext are already restricted-PSS-compliant EXCEPT
+# seccompProfile is missing from podSecurityContext — added explicitly below. No node-exporter-
+# style hostPath conflict here; Loki itself needs no host access (unlike Promtail, see
+# promtail-values.yaml in this same directory).
+#
+# gateway/resultsCache/chunksCache/lokiCanary are chart-default-enabled but add unneeded
+# complexity (an nginx proxy, two memcached deployments, and a synthetic-log-writing DaemonSet)
+# for a single-binary Minikube deployment — disabled below to keep the footprint minimal.
+
+deploymentMode: SingleBinary
+
+fullnameOverride: loki
+
+loki:
+  auth_enabled: false
+  commonConfig:
+    replication_factor: 1
+  storage:
+    type: filesystem
+  podSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  schemaConfig:
+    configs:
+      - from: "2024-01-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+
+singleBinary:
+  replicas: 1
+  resources:
+    requests: {cpu: 200m, memory: 256Mi}
+    limits: {cpu: 500m, memory: 512Mi}
+  persistence:
+    enabled: true
+    size: 5Gi
+    storageClass: standard
+
+# The chart's SimpleScalable-mode components (read/write/backend) default to 3 replicas each
+# regardless of deploymentMode — found via a failed install: the chart refuses to start if both
+# singleBinary and these are simultaneously non-zero. Explicitly zeroed since we're SingleBinary.
+read:
+  replicas: 0
+write:
+  replicas: 0
+backend:
+  replicas: 0
+
+gateway:
+  enabled: false
+resultsCache:
+  enabled: false
+chunksCache:
+  enabled: false
+lokiCanary:
+  enabled: false
+test:
+  enabled: false
