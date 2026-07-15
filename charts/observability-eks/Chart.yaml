@@ -1,0 +1,37 @@
+apiVersion: v2
+name: observability-eks
+description: >-
+  EKS-native packaging of the observability stack validated on Minikube in
+  Kubernetes-grafana-prometheus (Phases 1-10): kube-prometheus-stack (Prometheus, Grafana,
+  Alertmanager), Loki, Tempo, an OTel Collector, plus dashboards and alert rules as code.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+home: https://github.com/Siddharthasanapala/observability-monitoring-prom-graf-k8s
+sources:
+  - https://github.com/Siddharthasanapala/observability-monitoring-prom-graf-k8s
+keywords:
+  - observability
+  - prometheus
+  - grafana
+  - loki
+  - tempo
+  - eks
+dependencies:
+  - name: kube-prometheus-stack
+    version: "87.15.2"
+    repository: https://prometheus-community.github.io/helm-charts
+    condition: kube-prometheus-stack.enabled
+  - name: loki
+    version: "7.0.0"
+    repository: https://grafana.github.io/helm-charts
+    condition: loki.enabled
+  - name: tempo
+    version: "1.24.4"
+    repository: https://grafana.github.io/helm-charts
+    condition: tempo.enabled
+  - name: opentelemetry-collector
+    version: "0.165.0"
+    repository: https://open-telemetry.github.io/opentelemetry-helm-charts
+    alias: otel-collector
+    condition: otel-collector.enabled

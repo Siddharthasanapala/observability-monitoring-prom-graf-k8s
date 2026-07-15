@@ -26,3 +26,7 @@ Thumbs.db
 
 # Claude Code harness-internal state (not project content)
 .claude/
+
+# Downloaded Helm chart dependency archives — Chart.lock pins exact versions;
+# regenerate with `helm dependency update` rather than committing the .tgz files
+charts/*/charts/*.tgz

@@ -1,0 +1,25 @@
+{{- if .Values.dashboards.enabled }}
+{{/*
+Ships a "Platform Overview" dashboard for what this chart actually deploys (target health,
+firing alerts, Alertmanager cluster status, Prometheus TSDB health) — deliberately NOT a port of
+the Minikube implementation's sample-app-overview.json (manifests/dashboards/), which depends on
+a workload (Phase 8's observability-sample-app) this chart doesn't install. See README.md
+"Design decisions".
+
+Loaded via the same ConfigMap-sidecar mechanism as the Minikube implementation
+(manifests/dashboards/kustomization.yaml) — kube-prometheus-stack's Grafana sidecar (enabled by
+default in the kube-prometheus-stack subchart) watches for the `grafana_dashboard: "1"` label
+cluster-wide.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-dashboard-platform-overview
+  namespace: {{ .Values.namespace }}
+  labels:
+    grafana_dashboard: "1"
+    {{- include "observability-gke.labels" . | nindent 4 }}
+data:
+  platform-overview.json: |
+{{ .Files.Get "dashboards/platform-overview.json" | indent 4 }}
+{{- end }}

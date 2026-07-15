@@ -1,0 +1,59 @@
+# S3 backend overlay — layer on top of values.yaml to switch Loki and Tempo from PVC-backed
+# filesystem storage to S3 object storage, the enterprise-scale upgrade path documented in
+# docs/03-eks-documentation.md §5. Usage:
+#
+#   helm install observability ./charts/observability-eks \
+#     -f charts/observability-eks/values.yaml \
+#     -f charts/observability-eks/values-s3-backend.yaml \
+#     --set loki.serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=arn:aws:iam::<ACCOUNT_ID>:role/loki-s3-access \
+#     --set tempo.serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=arn:aws:iam::<ACCOUNT_ID>:role/tempo-s3-access
+#
+# Requires, before installing:
+#   1. Two S3 buckets (e.g. <account>-loki-chunks, <account>-tempo-traces).
+#   2. Two IAM roles with a policy granting s3:PutObject/GetObject/ListBucket/DeleteObject/
+#      GetObjectTagging/PutObjectTagging scoped to their bucket, trust policy scoped to this
+#      cluster's OIDC provider (IRSA) and the `system:serviceaccount:<namespace>:loki` /
+#      `:tempo` subjects.
+#   3. The bucket names and region filled in below.
+#
+# This is a genuine architecture change, not just a storage swap — see docs/03-eks-documentation.md
+# §5 for why (decouples retention from a single EBS volume, and removes the WAL-replay-on-restart
+# memory pressure that caused a real Tempo OOMKill in docs/01-minikube-implementation.md §Phase 9).
+# Access/secret keys are deliberately left unset in both blocks below — IRSA (or Pod Identity)
+# provides credentials via the ServiceAccount annotation, not static keys.
+
+loki:
+  loki:
+    storage:
+      bucketNames:
+        chunks: "<BUCKET_PREFIX>-loki-chunks"
+        ruler: "<BUCKET_PREFIX>-loki-ruler"
+      type: s3
+      s3:
+        region: "<AWS_REGION>"
+        s3ForcePathStyle: false
+    schemaConfig:
+      configs:
+        - from: "2024-01-01"
+          store: tsdb
+          object_store: s3
+          schema: v13
+          index:
+            prefix: loki_index_
+            period: 24h
+  # PVC persistence still used for the WAL/index cache even in S3 mode — only chunk storage
+  # moves to S3. Left at the values.yaml default (5Gi, gp3).
+
+tempo:
+  tempo:
+    storage:
+      trace:
+        backend: s3
+        s3:
+          bucket: "<BUCKET_PREFIX>-tempo-traces"
+          region: "<AWS_REGION>"
+          # endpoint/access_key/secret_key intentionally left unset — real AWS S3 needs no
+          # endpoint override, and IRSA (via the ServiceAccount annotation) supplies credentials.
+          # Only set `endpoint` if targeting an S3-compatible non-AWS store.
+  # persistence.enabled stays true for local WAL before blocks flush to S3 — same reasoning as
+  # Loki above.

@@ -1,0 +1,381 @@
+# observability-gke default values.
+#
+# Namespace design, differing deliberately from the Minikube reference implementation's 4-way
+# split (observability/logging/tracing/demo-app, see docs/01-minikube-implementation.md §Phase
+# 3): kube-prometheus-stack, Loki, Tempo, and the OTel Collector all install into ONE namespace
+# (`observability.namespace` below). This is a real constraint, not a stylistic choice — checked
+# each chart's own values.yaml before deciding: the `grafana/loki` and
+# `open-telemetry/opentelemetry-collector` charts both expose a top-level `namespaceOverride`
+# (used below to keep node-exporter and could keep Loki/OTel Collector elsewhere), but
+# `grafana/tempo` has no such key at all — it always deploys into `.Release.Namespace`, full
+# stop. Since Tempo can't be split out, collapsing everything to one namespace for this
+# packaged chart is simpler and more honest than a partial split. RBAC/NetworkPolicy/PSS
+# multi-tenancy hardening from the Minikube implementation's Phase 3-4 is intentionally NOT
+# reproduced here — this chart packages the observability stack itself; namespace-isolation
+# policy is a platform-team concern applied around it, not bundled into it. See README.md
+# "Design decisions" for the full reasoning, including Promtail (companion install, see below).
+
+namespace: observability
+
+# ---------------------------------------------------------------------------
+# kube-prometheus-stack — Prometheus (2 replicas), Alertmanager (3 replicas), Grafana,
+# kube-state-metrics, prometheus-operator. Ported from the validated Minikube values
+# (manifests/kube-prometheus-stack/values.yaml) with GKE-specific overrides layered on top.
+# ---------------------------------------------------------------------------
+kube-prometheus-stack:
+  enabled: true
+
+  # Minikube's control-plane components (kube-scheduler/kube-controller-manager/kube-etcd) were
+  # disabled because Minikube hardcodes them to bind 127.0.0.1 (unreachable from any pod). GKE's
+  # control plane is fully managed and not part of the node pool at all — these ServiceMonitors
+  # would never find a target on GKE either, for a different reason. Left disabled.
+  kubeScheduler:
+    enabled: false
+  kubeControllerManager:
+    enabled: false
+  kubeEtcd:
+    enabled: false
+
+  fullnameOverride: kube-prometheus-stack
+
+  prometheus:
+    prometheusSpec:
+      replicas: 2
+      retention: 10d
+      resources:
+        requests: {cpu: 300m, memory: 400Mi}
+        limits: {cpu: 700m, memory: 700Mi}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: prometheus
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      storageSpec:
+        volumeClaimTemplate:
+          spec:
+            # GKE: premium-rwo (pd-ssd), not Minikube's standard hostpath class. Prometheus's
+            # 2-replica write-heavy TSDB is the component most likely to be I/O-sensitive; if
+            # real cardinality shows standard-rwo (pd-balanced) is enough, switch this one value
+            # — cheaper, still solid-state-backed. See docs/02-gke-documentation.md §2.
+            storageClassName: premium-rwo
+            accessModes: ["ReadWriteOnce"]
+            resources:
+              requests:
+                storage: 4Gi
+
+  alertmanager:
+    alertmanagerSpec:
+      replicas: 3
+      resources:
+        requests: {cpu: 50m, memory: 64Mi}
+        limits: {cpu: 100m, memory: 128Mi}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: alertmanager
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      storage:
+        volumeClaimTemplate:
+          spec:
+            storageClassName: premium-rwo
+            accessModes: ["ReadWriteOnce"]
+            resources:
+              requests:
+                storage: 1Gi
+
+  grafana:
+    persistence:
+      enabled: true
+      type: pvc
+      storageClassName: premium-rwo
+      accessModes: ["ReadWriteOnce"]
+      size: 2Gi
+    initChownData:
+      enabled: false
+    resources:
+      requests: {cpu: 100m, memory: 128Mi}
+      limits: {cpu: 300m, memory: 256Mi}
+    sidecar:
+      resources:
+        requests: {cpu: 50m, memory: 64Mi}
+        limits: {cpu: 100m, memory: 128Mi}
+      datasources:
+        enabled: true
+        defaultDatasourceEnabled: true
+    # Admin credentials intentionally NOT set here — the chart auto-generates a random
+    # `kube-prometheus-stack-grafana` Secret. See the Minikube implementation's own note on why
+    # (docs/01-minikube-implementation.md "Operational lessons") — the exact same PVC-persistence
+    # desync risk applies here; consider `admin.existingSecret` for a real deployment.
+    #
+    # Loki/Tempo datasources: same-namespace short names, not the Minikube implementation's
+    # cross-namespace FQDNs (loki.logging.svc.cluster.local etc.) — everything in this chart
+    # shares one namespace, see the file header. UIDs pinned (`loki`, `tempo`) so the
+    # trace<->logs/metrics correlation wiring below has stable targets, same reasoning as
+    # manifests/kube-prometheus-stack/values.yaml.
+    additionalDataSources:
+      - name: Loki
+        uid: loki
+        type: loki
+        access: proxy
+        url: http://loki:3100
+        isDefault: false
+      - name: Tempo
+        uid: tempo
+        type: tempo
+        access: proxy
+        url: http://tempo:3200
+        isDefault: false
+        jsonData:
+          tracesToLogsV2:
+            datasourceUid: loki
+            spanStartTimeShift: "-1h"
+            spanEndTimeShift: "1h"
+            tags: ["namespace", "pod"]
+            filterByTraceID: false
+            filterBySpanID: false
+          tracesToMetrics:
+            datasourceUid: prometheus
+          serviceMap:
+            datasourceUid: prometheus
+          nodeGraph:
+            enabled: true
+          lokiSearch:
+            datasourceUid: loki
+    # GCE Ingress for Grafana — disabled by default (fresh installs have no hostname/TLS cert
+    # ready). Enable and fill in `hosts`/`tls` to expose Grafana behind a real GCE HTTP(S) LB.
+    ingress:
+      enabled: false
+      ingressClassName: gce
+      annotations: {}
+        # kubernetes.io/ingress.allow-http: "false"          # force HTTPS-only
+        # networking.gke.io/managed-certificates: grafana-cert # GKE-managed cert, created separately
+      hosts:
+        - grafana.example.com
+      path: /
+
+  kube-state-metrics:
+    resources:
+      requests: {cpu: 50m, memory: 64Mi}
+      limits: {cpu: 100m, memory: 128Mi}
+
+  prometheusOperator:
+    resources:
+      requests: {cpu: 50m, memory: 64Mi}
+      limits: {cpu: 200m, memory: 128Mi}
+    prometheusConfigReloader:
+      resources:
+        requests: {cpu: 50m, memory: 64Mi}
+        limits: {cpu: 100m, memory: 128Mi}
+
+  # node-exporter needs hostNetwork/hostPID/hostPath — moved to kube-system, same as the
+  # Minikube implementation (manifests/kube-prometheus-stack/values.yaml). This is unaffected by
+  # GKE Standard vs Autopilot in terms of *this value* — but on Autopilot, node-exporter cannot
+  # run at all regardless of namespace (see docs/02-gke-documentation.md §1); this chart assumes
+  # GKE Standard. Set `prometheus-node-exporter.enabled: false` and see the GMP note in README.md
+  # if targeting Autopilot.
+  prometheus-node-exporter:
+    namespaceOverride: kube-system
+
+# ---------------------------------------------------------------------------
+# Loki — SingleBinary mode. Ported from manifests/loki/values.yaml.
+# ---------------------------------------------------------------------------
+loki:
+  enabled: true
+  deploymentMode: SingleBinary
+  fullnameOverride: loki
+
+  loki:
+    auth_enabled: false
+    commonConfig:
+      replication_factor: 1
+    storage:
+      # filesystem (PVC-backed), matching the validated Minikube design — the enterprise-scale
+      # upgrade path is GCS, see values-gcs-backend.yaml and docs/02-gke-documentation.md §5.
+      type: filesystem
+    podSecurityContext:
+      seccompProfile:
+        type: RuntimeDefault
+    schemaConfig:
+      configs:
+        - from: "2024-01-01"
+          store: tsdb
+          object_store: filesystem
+          schema: v13
+          index:
+            prefix: loki_index_
+            period: 24h
+
+  singleBinary:
+    replicas: 1
+    resources:
+      requests: {cpu: 200m, memory: 256Mi}
+      limits: {cpu: 500m, memory: 512Mi}
+    persistence:
+      enabled: true
+      size: 5Gi
+      storageClass: premium-rwo
+
+  read: {replicas: 0}
+  write: {replicas: 0}
+  backend: {replicas: 0}
+
+  gateway: {enabled: false}
+  resultsCache: {enabled: false}
+  chunksCache: {enabled: false}
+  lokiCanary: {enabled: false}
+  test: {enabled: false}
+
+  # Workload Identity — only needed once values-gcs-backend.yaml is layered in (GCS access).
+  # Empty by default; fill in the GCP service account email and bind it with
+  # `gcloud iam service-accounts add-iam-policy-binding` (see README.md).
+  serviceAccount:
+    annotations: {}
+      # iam.gke.io/gcp-service-account: "loki-gcs@<PROJECT_ID>.iam.gserviceaccount.com"
+
+# ---------------------------------------------------------------------------
+# Tempo — single-binary. Ported from manifests/tempo/values.yaml.
+# ---------------------------------------------------------------------------
+tempo:
+  enabled: true
+  fullnameOverride: tempo
+  replicas: 1
+
+  resources:
+    requests: {cpu: 200m, memory: 512Mi}
+    limits: {cpu: 500m, memory: 1280Mi}
+
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+    seccompProfile:
+      type: RuntimeDefault
+
+  tempo:
+    retention: 24h
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: ["ALL"]
+      # readOnlyRootFilesystem intentionally NOT set — chart's own comment: "fails if true, do
+      # not enable" (Tempo writes local trace blocks/WAL to disk). See manifests/tempo/values.yaml.
+
+  persistence:
+    enabled: true
+    accessModes: ["ReadWriteOnce"]
+    size: 3Gi
+    storageClassName: premium-rwo
+
+  serviceMonitor:
+    enabled: false
+
+  serviceAccount:
+    annotations: {}
+      # iam.gke.io/gcp-service-account: "tempo-gcs@<PROJECT_ID>.iam.gserviceaccount.com"
+
+# ---------------------------------------------------------------------------
+# OTel Collector — traces-only pipeline, receives OTLP, forwards to Tempo. Ported from
+# manifests/tempo/otel-collector-values.yaml. Exporter endpoint uses the same-namespace short
+# name "tempo" (not "tempo.tracing.svc.cluster.local" — see the file header on namespace design).
+# ---------------------------------------------------------------------------
+otel-collector:
+  enabled: true
+  mode: deployment
+  replicaCount: 1
+
+  image:
+    repository: otel/opentelemetry-collector-contrib
+  command:
+    name: otelcol-contrib
+
+  resources:
+    requests: {cpu: 50m, memory: 64Mi}
+    limits: {cpu: 150m, memory: 128Mi}
+
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    seccompProfile:
+      type: RuntimeDefault
+
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+
+  config:
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: ${env:MY_POD_IP}:4317
+          http:
+            endpoint: ${env:MY_POD_IP}:4318
+      jaeger: null
+      zipkin: null
+      prometheus: null
+    exporters:
+      debug: {}
+      otlp/tempo:
+        endpoint: tempo:4317
+        tls:
+          insecure: true
+    service:
+      pipelines:
+        traces:
+          receivers: ["otlp"]
+          processors: ["memory_limiter", "batch"]
+          exporters: ["debug", "otlp/tempo"]
+        logs: null
+        metrics: null
+
+# ---------------------------------------------------------------------------
+# Promtail — NOT a subchart dependency of this chart. The `grafana/promtail` chart has no
+# `namespaceOverride` (checked before deciding this, same as the Tempo finding above), and
+# Promtail needs `hostPath` mounts that make `kube-system` the right place for it regardless —
+# a genuinely different namespace than everything above. Install it as a companion release; see
+# README.md "Installing Promtail" for the exact command. `values-promtail.yaml` in this chart
+# directory is the values file for that companion install (same content as
+# manifests/loki/promtail-values.yaml, with the push URL updated to this chart's namespace).
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# This chart's own templates: dashboards + alert rules (templates/).
+# ---------------------------------------------------------------------------
+dashboards:
+  enabled: true
+
+alertRules:
+  nodeHealth:
+    enabled: true
+  podCrashLoops:
+    enabled: true
+  # SLO burn-rate alert is an EXAMPLE pattern, not wired to a specific app by default — this
+  # chart doesn't deploy a workload to monitor (the sample app is Phase 8's own repo, out of
+  # scope for this chart). Enable and point `jobName` at your own Prometheus scrape job to reuse
+  # the pattern validated in docs/01-minikube-implementation.md §Phase 9.
+  slo:
+    enabled: false
+    jobName: "your-app-job-name"
+    warningThreshold: 0.05
+    criticalThreshold: 0.20

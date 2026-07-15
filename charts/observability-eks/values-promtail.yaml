@@ -1,0 +1,21 @@
+# Values for the companion Promtail install — NOT a subchart of this chart, see values.yaml's
+# "Promtail" section header for why (grafana/promtail has no namespaceOverride, and it needs
+# `hostPath` mounts that belong in kube-system regardless). Install with:
+#
+#   helm install promtail grafana/promtail --version 6.17.1 \
+#     -n kube-system \
+#     -f charts/observability-eks/values-promtail.yaml
+#
+# Not viable on Fargate at all — see values.yaml's Promtail comment. Managed-node-group EKS only.
+#
+# Same content as manifests/loki/promtail-values.yaml, with the push URL updated to match this
+# chart's single-namespace design (default namespace: "observability" — update the URL below to
+# match if you changed `namespace` in values.yaml).
+
+config:
+  clients:
+    - url: http://loki.observability.svc.cluster.local:3100/loki/api/v1/push
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 150m, memory: 128Mi}

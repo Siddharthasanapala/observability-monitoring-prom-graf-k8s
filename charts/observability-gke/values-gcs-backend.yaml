@@ -1,0 +1,51 @@
+# GCS backend overlay — layer on top of values.yaml to switch Loki and Tempo from PVC-backed
+# filesystem storage to GCS object storage, the enterprise-scale upgrade path documented in
+# docs/02-gke-documentation.md §5. Usage:
+#
+#   helm install observability ./charts/observability-gke \
+#     -f charts/observability-gke/values.yaml \
+#     -f charts/observability-gke/values-gcs-backend.yaml \
+#     --set loki.serviceAccount.annotations."iam\.gke\.io/gcp-service-account"=loki-gcs@<PROJECT_ID>.iam.gserviceaccount.com \
+#     --set tempo.serviceAccount.annotations."iam\.gke\.io/gcp-service-account"=tempo-gcs@<PROJECT_ID>.iam.gserviceaccount.com
+#
+# Requires, before installing:
+#   1. Two GCS buckets (e.g. <project>-loki-chunks, <project>-tempo-traces).
+#   2. Two GCP service accounts with `roles/storage.objectAdmin` scoped to their bucket.
+#   3. Workload Identity bindings from those GCP SAs to this chart's `loki`/`tempo` Kubernetes
+#      ServiceAccounts (`gcloud iam service-accounts add-iam-policy-binding ... roles/iam.workloadIdentityUser`).
+#   4. The bucket names filled in below.
+#
+# This is a genuine architecture change, not just a storage swap — see docs/02-gke-documentation.md
+# §5 for why (decouples retention from a single PD, and removes the WAL-replay-on-restart memory
+# pressure that caused a real Tempo OOMKill in docs/01-minikube-implementation.md §Phase 9).
+
+loki:
+  loki:
+    storage:
+      bucketNames:
+        chunks: "<PROJECT_ID>-loki-chunks"
+        ruler: "<PROJECT_ID>-loki-ruler"
+      type: gcs
+      gcs:
+        chunkBufferSize: 0
+    schemaConfig:
+      configs:
+        - from: "2024-01-01"
+          store: tsdb
+          object_store: gcs
+          schema: v13
+          index:
+            prefix: loki_index_
+            period: 24h
+  # PVC persistence still used for the WAL/index cache even in GCS mode — only chunk storage
+  # moves to GCS. Left at the values.yaml default (5Gi, premium-rwo).
+
+tempo:
+  tempo:
+    storage:
+      trace:
+        backend: gcs
+        gcs:
+          bucket_name: "<PROJECT_ID>-tempo-traces"
+  # persistence.enabled stays true for local WAL before blocks flush to GCS — same reasoning as
+  # Loki above.

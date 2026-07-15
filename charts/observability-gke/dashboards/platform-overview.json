@@ -1,0 +1,63 @@
+{
+  "title": "Platform Overview",
+  "uid": "observability-gke-platform-overview",
+  "tags": ["observability-gke"],
+  "timezone": "browser",
+  "editable": true,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": { "text": "Prometheus", "value": "prometheus" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Scrape targets up / down",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "count(up == 1)", "legendFormat": "up" },
+        { "expr": "count(up == 0)", "legendFormat": "down" }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Firing alerts by severity",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "sum by (severity) (ALERTS{alertstate=\"firing\"})", "legendFormat": "{{severity}}" }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Alertmanager cluster members",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        { "expr": "max(alertmanager_cluster_members)", "legendFormat": "members" }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Prometheus TSDB head series",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        { "expr": "sum(prometheus_tsdb_head_series)", "legendFormat": "head series" }
+      ]
+    }
+  ],
+  "schemaVersion": 39
+}

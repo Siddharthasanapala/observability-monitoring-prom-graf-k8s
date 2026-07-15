@@ -1,0 +1,114 @@
+{{/*
+`release: kube-prometheus-stack` label required on every PrometheusRule — the subchart above
+uses the chart-default `ruleSelectorNilUsesHelmValues: true`, which only watches PrometheusRules
+carrying this label (confirmed against a shipped rule's own labels before writing the original
+Minikube versions of these — see docs/01-minikube-implementation.md §Phase 9). Since
+`kube-prometheus-stack.fullnameOverride` is fixed to "kube-prometheus-stack" in values.yaml,
+this label value is fixed too, not templated from the release name.
+*/}}
+{{- if .Values.alertRules.nodeHealth.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ .Release.Name }}-node-health
+  namespace: {{ .Values.namespace }}
+  labels:
+    release: kube-prometheus-stack
+    {{- include "observability-eks.labels" . | nindent 4 }}
+spec:
+  groups:
+    - name: node-health
+      rules:
+        - alert: NodeHighCPUUsage
+          expr: |
+            100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 90
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Node {{`{{ $labels.instance }}`}} CPU usage above 90%"
+            description: "Node {{`{{ $labels.instance }}`}} has had >90% CPU utilization for 10 minutes."
+        - alert: NodeHighMemoryUsage
+          expr: |
+            (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Node {{`{{ $labels.instance }}`}} memory usage above 90%"
+            description: "Node {{`{{ $labels.instance }}`}} has had >90% memory utilization for 10 minutes."
+        - alert: NodeNotReady
+          expr: kube_node_status_condition{condition="Ready", status="true"} == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Node {{`{{ $labels.node }}`}} is not Ready"
+            description: "Node {{`{{ $labels.node }}`}} has been NotReady for 5 minutes."
+{{- end }}
+---
+{{- if .Values.alertRules.podCrashLoops.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ .Release.Name }}-pod-crashloops
+  namespace: {{ .Values.namespace }}
+  labels:
+    release: kube-prometheus-stack
+    {{- include "observability-eks.labels" . | nindent 4 }}
+spec:
+  groups:
+    - name: pod-crashloops
+      rules:
+        - alert: PodCrashLooping
+          expr: |
+            increase(kube_pod_container_status_restarts_total[15m]) > 3
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Pod {{`{{ $labels.namespace }}/{{ $labels.pod }}`}} is crash-looping"
+            description: "Container {{`{{ $labels.container }}`}} in {{`{{ $labels.namespace }}/{{ $labels.pod }}`}} has restarted more than 3 times in the last 15 minutes."
+{{- end }}
+---
+{{- if .Values.alertRules.slo.enabled }}
+{{/*
+EXAMPLE pattern, not wired to a real workload by default — see values.yaml's `alertRules.slo`
+comment. Set `.Values.alertRules.slo.jobName` to your own Prometheus scrape job (must expose
+`http_server_request_duration_seconds_count` with an `http_response_status_code` label, or adapt
+the expr below to your app's actual metric names) before enabling.
+*/}}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ .Release.Name }}-slo-example
+  namespace: {{ .Values.namespace }}
+  labels:
+    release: kube-prometheus-stack
+    {{- include "observability-eks.labels" . | nindent 4 }}
+spec:
+  groups:
+    - name: slo-example
+      rules:
+        - record: app:http_requests:error_rate5m
+          expr: |
+            sum(rate(http_server_request_duration_seconds_count{job="{{ .Values.alertRules.slo.jobName }}",http_response_status_code=~"5.."}[5m]))
+            /
+            sum(rate(http_server_request_duration_seconds_count{job="{{ .Values.alertRules.slo.jobName }}"}[5m]))
+        - alert: AppHighErrorRate
+          expr: app:http_requests:error_rate5m > {{ .Values.alertRules.slo.warningThreshold }}
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ .Values.alertRules.slo.jobName }} 5xx error rate above {{ mulf .Values.alertRules.slo.warningThreshold 100 }}%"
+            description: "{{`{{ $value | humanizePercentage }}`}} of requests to {{ .Values.alertRules.slo.jobName }} have returned 5xx over the last 5 minutes."
+        - alert: AppCriticalErrorRate
+          expr: app:http_requests:error_rate5m > {{ .Values.alertRules.slo.criticalThreshold }}
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "{{ .Values.alertRules.slo.jobName }} 5xx error rate above {{ mulf .Values.alertRules.slo.criticalThreshold 100 }}% (SLO burn)"
+            description: "{{`{{ $value | humanizePercentage }}`}} of requests to {{ .Values.alertRules.slo.jobName }} have returned 5xx over the last 5 minutes — burning error budget fast."
+{{- end }}
