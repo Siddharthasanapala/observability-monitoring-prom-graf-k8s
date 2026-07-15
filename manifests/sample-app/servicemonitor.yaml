@@ -1,0 +1,19 @@
+# `release: kube-prometheus-stack` label is required — confirmed by inspecting the chart's own
+# ServiceMonitors (Phase 5 left serviceMonitorSelectorNilUsesHelmValues at its chart default of
+# true, which makes Prometheus only watch ServiceMonitors carrying this exact label).
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: observability-sample-app
+  namespace: demo-app
+  labels:
+    app.kubernetes.io/name: observability-sample-app
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: observability-sample-app
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

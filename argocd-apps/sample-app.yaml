@@ -1,0 +1,25 @@
+# Phase 8 — sample app, GitOps-managed via the root App-of-Apps. Plain directory source (no
+# Helm chart — this is our own manifests, not a third-party chart), matching the pattern used
+# for namespaces/rbac/network-policies/security/cert-manager.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sample-app
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Siddharthasanapala/observability-monitoring-prom-graf-k8s.git
+    targetRevision: siddhu
+    path: manifests/sample-app
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: demo-app
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false

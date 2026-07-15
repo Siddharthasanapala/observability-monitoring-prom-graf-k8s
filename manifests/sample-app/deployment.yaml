@@ -1,0 +1,62 @@
+# Phase 8b — the sample app deployed into demo-app (Phase 3), restricted-PSS (Phase 4).
+# Image pinned to the exact commit SHA pushed by observability-sample-app's CI (Phase 8a) —
+# same "pin exact versions, not floating tags" practice as every other component in this repo.
+# Public GHCR package, confirmed pullable anonymously — no imagePullSecret needed (the plan's
+# "if private" branch doesn't apply here).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: observability-sample-app
+  namespace: demo-app
+  labels:
+    app.kubernetes.io/name: observability-sample-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: observability-sample-app
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: observability-sample-app
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1654    # confirmed via `docker exec ... id` against the built image ($APP_UID)
+        runAsGroup: 1654
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: sample-app
+          image: ghcr.io/siddharthasanapala/observability-sample-app:sha-3bea9eebd6407084b903bb830509a9e621c20ae1
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: observability-sample-app
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://otel-collector-opentelemetry-collector.tracing.svc.cluster.local:4317
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: 250m, memory: 256Mi}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        # readOnlyRootFilesystem: true needs somewhere writable for .NET's own scratch/temp use
+        - name: tmp
+          emptyDir: {}
