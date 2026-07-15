@@ -137,13 +137,46 @@ grafana:
   # in git" principle as ArgoCD's own initial-admin-secret pattern (Phase 2).
   # Phase 6: Loki datasource, extending this same provisioning mechanism. Loki's fullnameOverride
   # is "loki" (manifests/loki/values.yaml), deployed in the `logging` namespace — cross-namespace
-  # FQDN required, same reasoning as Promtail's client URL.
+  # FQDN required, same reasoning as Promtail's client URL. Explicit `uid: loki` (chart's own
+  # Prometheus datasource similarly pins `uid: prometheus`) so Phase 7's Tempo datasource can
+  # reference it by a known, stable ID for trace-to-logs correlation instead of Grafana's
+  # otherwise-random auto-generated UID.
+  #
+  # Phase 7: Tempo datasource, same pattern, `uid: tempo`. jsonData wires the standard Grafana
+  # trace<->logs/metrics correlation: tracesToLogsV2 (jump from a span to its Loki logs, filtered
+  # by the "namespace"/"pod" labels Promtail already attaches), tracesToMetrics + serviceMap
+  # (jump from a span to Prometheus — service-graph metrics aren't emitted by anything yet since
+  # Tempo's metrics-generator isn't enabled in tempo/values.yaml, so these panels stay empty
+  # until/unless that's turned on later; the wiring itself is still correct and harmless without it).
   additionalDataSources:
     - name: Loki
+      uid: loki
       type: loki
       access: proxy
       url: http://loki.logging.svc.cluster.local:3100
       isDefault: false
+    - name: Tempo
+      uid: tempo
+      type: tempo
+      access: proxy
+      url: http://tempo.tracing.svc.cluster.local:3200
+      isDefault: false
+      jsonData:
+        tracesToLogsV2:
+          datasourceUid: loki
+          spanStartTimeShift: "-1h"
+          spanEndTimeShift: "1h"
+          tags: ["namespace", "pod"]
+          filterByTraceID: false
+          filterBySpanID: false
+        tracesToMetrics:
+          datasourceUid: prometheus
+        serviceMap:
+          datasourceUid: prometheus
+        nodeGraph:
+          enabled: true
+        lokiSearch:
+          datasourceUid: loki
 
 kube-state-metrics:
   resources:

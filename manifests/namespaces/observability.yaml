@@ -10,6 +10,13 @@
 # outright. When Phase 5 lands, node-exporter will need to run in a separate,
 # less-restricted namespace (e.g. kube-system) — it cannot run inside `observability`
 # as labeled here. Flagging now so it isn't a surprise mid-Phase-5.
+#
+# Phase 7 fix: found live that limits.cpu=3 left ZERO headroom once Phase 5's steady-state
+# pods were running — every subsequent ArgoCD sync's PreSync hook Job (kube-prometheus-stack's
+# admission-create/admission-patch, which run on EVERY sync, not just install) could never
+# schedule, so the Application was stuck OutOfSync indefinitely (found: a hook Job wedged for
+# 16h retrying). This isn't a one-time bootstrap issue, it recurs on every future values.yaml
+# change — bumped limits.cpu/memory for permanent hook headroom, not just this one fix.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -32,8 +39,8 @@ spec:
   hard:
     requests.cpu: "2"
     requests.memory: 4Gi
-    limits.cpu: "3"
-    limits.memory: 6Gi
+    limits.cpu: "4"
+    limits.memory: 7Gi
     persistentvolumeclaims: "10"
     pods: "30"
 ---

@@ -1,0 +1,66 @@
+# Phase 7 — OpenTelemetry Collector, GitOps-managed. Chart: open-telemetry/opentelemetry-collector,
+# pinned to 0.165.0. Deployed into `tracing` alongside Tempo. `mode: deployment` (not daemonset —
+# this is a stateless OTLP gateway apps push to, not a host-level agent like Promtail/node-exporter,
+# so it belongs in the restricted-PSS namespace with no host-access conflict).
+#
+# The chart's default config exports everywhere to a `debug` (console-only) sink and defines
+# logs/metrics/traces pipelines we don't need here — Loki and Prometheus already handle logs and
+# metrics via their own paths (Phases 5-6). Overridden below to a traces-only pipeline: receive
+# OTLP, batch, export to Tempo's own OTLP receiver. `debug` kept alongside the real exporter so
+# `kubectl logs` shows received spans during validation.
+
+mode: deployment
+replicaCount: 1
+
+# Found via live install: recent chart versions dropped their default image entirely (fails
+# fast with "'image.repository' must be set" rather than silently picking one). Using the
+# "contrib" distribution + matching command name, per the chart's own values.yaml comment on
+# this tradeoff — broadest receiver/exporter support, the standard choice for this chart.
+image:
+  repository: otel/opentelemetry-collector-contrib
+command:
+  name: otelcol-contrib
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 150m, memory: 128Mi}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]
+
+config:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: ${env:MY_POD_IP}:4317
+        http:
+          endpoint: ${env:MY_POD_IP}:4318
+    jaeger: null
+    zipkin: null
+    prometheus: null
+
+  exporters:
+    debug: {}
+    otlp/tempo:
+      endpoint: tempo.tracing.svc.cluster.local:4317
+      tls:
+        insecure: true
+
+  service:
+    pipelines:
+      traces:
+        receivers: ["otlp"]
+        processors: ["memory_limiter", "batch"]
+        exporters: ["debug", "otlp/tempo"]
+      logs: null
+      metrics: null

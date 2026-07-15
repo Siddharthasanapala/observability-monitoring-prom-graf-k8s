@@ -29,3 +29,20 @@ spec:
     syncOptions:
       - CreateNamespace=false
       - ServerSideApply=true   # kube-prometheus-stack ships large CRDs — same fix as ArgoCD (Phase 2) and cert-manager (Phase 4)
+  # Found via Phase 7 sync debugging: the Grafana subchart auto-generates a random
+  # admin-password on every `helm template` render (we deliberately don't pin one — Phase 5's
+  # "don't put secrets in git" note). Without this, ArgoCD sees a perpetual diff on that Secret
+  # and its Deployment's checksum/secret annotation, staying permanently OutOfSync and
+  # regenerating (rotating) the password on every sync. Ignoring the fields that are expected
+  # to differ, not the whole resource, so real drift elsewhere is still caught.
+  ignoreDifferences:
+    - group: ""
+      kind: Secret
+      name: kube-prometheus-stack-grafana
+      jsonPointers:
+        - /data/admin-password
+    - group: apps
+      kind: Deployment
+      name: kube-prometheus-stack-grafana
+      jqPathExpressions:
+        - '.spec.template.metadata.annotations."checksum/secret"'

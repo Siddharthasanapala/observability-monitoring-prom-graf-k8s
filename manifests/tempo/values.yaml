@@ -1,0 +1,54 @@
+# Phase 7 — Tempo (traces), GitOps-managed. Chart: grafana/tempo, pinned to 1.24.4 (single
+# binary mode — same "avoid multi-component complexity at this scale" reasoning as Loki in
+# Phase 6). Deployed into `tracing` (Phase 4: `restricted` PSS, flagged as low-friction since
+# neither Tempo nor the OTel Collector need host access).
+#
+# Verified against the chart's own defaults before writing this (Phase 5/6 lesson):
+# - Storage backend already defaults to `local` (PVC-backed via persistence.enabled below) —
+#   no override needed, unlike Loki which defaulted to s3.
+# - Pod-level securityContext sets runAsNonRoot/runAsUser/fsGroup but is MISSING
+#   seccompProfile — added explicitly below, same gap as Loki.
+# - Container-level `tempo.securityContext` is EMPTY by default (chart ships the restricted
+#   fields as commented-out examples) — filled in below with one deliberate exception:
+#   the chart's own comment warns `readOnlyRootFilesystem: true` "fails, do not enable"
+#   (Tempo writes local blocks/WAL to disk), so that one is left unset.
+# - Tempo has its own built-in OTLP receiver (4317/4318), but per the plan we front it with a
+#   dedicated OTel Collector (otel-collector-values.yaml) rather than have apps talk to Tempo
+#   directly — decouples app instrumentation from the trace backend.
+# - networkPolicy.enabled defaults to false (chart's own NetworkPolicy feature) — left
+#   disabled, NetworkPolicy is hand-authored in manifests/network-policies/tracing.yaml instead,
+#   consistent with every other component so far.
+
+fullnameOverride: tempo
+
+replicas: 1
+
+resources:
+  requests: {cpu: 200m, memory: 256Mi}
+  limits: {cpu: 500m, memory: 512Mi}
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+tempo:
+  retention: 24h
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    # readOnlyRootFilesystem intentionally NOT set — chart maintainers' own comment: "fails if
+    # true, do not enable" (Tempo writes local trace blocks/WAL to its container filesystem).
+
+persistence:
+  enabled: true
+  accessModes: ["ReadWriteOnce"]
+  size: 3Gi
+  storageClassName: standard
+
+serviceMonitor:
+  enabled: false   # kube-prometheus-stack's Prometheus already scrapes via its own discovery once Phase 9 adds a target; avoid a premature dependency on that CRD path here

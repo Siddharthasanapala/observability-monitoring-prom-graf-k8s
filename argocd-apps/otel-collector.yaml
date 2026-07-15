@@ -1,0 +1,30 @@
+# Phase 7 — OpenTelemetry Collector, GitOps-managed via the root App-of-Apps.
+# Same namespace as tempo.yaml (tracing) but a separate Application/chart, following the
+# pattern established for loki.yaml/promtail.yaml in Phase 6.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: otel-collector
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
+      chart: opentelemetry-collector
+      targetRevision: 0.165.0
+      helm:
+        valueFiles:
+          - $values/manifests/tempo/otel-collector-values.yaml
+    - repoURL: https://github.com/Siddharthasanapala/observability-monitoring-prom-graf-k8s.git
+      targetRevision: siddhu
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: tracing
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+      - ServerSideApply=true

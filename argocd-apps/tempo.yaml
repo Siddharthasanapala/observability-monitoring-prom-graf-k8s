@@ -1,0 +1,28 @@
+# Phase 7 — Tempo, GitOps-managed via the root App-of-Apps.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tempo
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://grafana.github.io/helm-charts
+      chart: tempo
+      targetRevision: 1.24.4
+      helm:
+        valueFiles:
+          - $values/manifests/tempo/values.yaml
+    - repoURL: https://github.com/Siddharthasanapala/observability-monitoring-prom-graf-k8s.git
+      targetRevision: siddhu
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: tracing
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+      - ServerSideApply=true
