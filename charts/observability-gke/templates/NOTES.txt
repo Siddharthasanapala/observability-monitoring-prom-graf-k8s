@@ -1,11 +1,11 @@
-observability-gke installed into namespace "{{ .Values.namespace }}".
+observability-gke installed into namespace "{{ .Release.Namespace }}".
 
 Grafana admin password:
-  kubectl get secret kube-prometheus-stack-grafana -n {{ .Values.namespace }} \
+  kubectl get secret kube-prometheus-stack-grafana -n {{ .Release.Namespace }} \
     -o jsonpath='{.data.admin-password}' | base64 -d; echo
 
 Access Grafana (no Ingress configured by default — see values.yaml `kube-prometheus-stack.grafana.ingress`):
-  kubectl port-forward -n {{ .Values.namespace }} svc/kube-prometheus-stack-grafana 3000:80
+  kubectl port-forward -n {{ .Release.Namespace }} svc/kube-prometheus-stack-grafana 3000:80
 
 {{- if not .Values.dashboards.enabled }}
 

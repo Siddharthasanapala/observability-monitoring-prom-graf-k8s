@@ -11,7 +11,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
   name: {{ .Release.Name }}-node-health
-  namespace: {{ .Values.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     release: kube-prometheus-stack
     {{- include "observability-gke.labels" . | nindent 4 }}
@@ -52,7 +52,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
   name: {{ .Release.Name }}-pod-crashloops
-  namespace: {{ .Values.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     release: kube-prometheus-stack
     {{- include "observability-gke.labels" . | nindent 4 }}
@@ -82,7 +82,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
   name: {{ .Release.Name }}-slo-example
-  namespace: {{ .Values.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     release: kube-prometheus-stack
     {{- include "observability-gke.labels" . | nindent 4 }}

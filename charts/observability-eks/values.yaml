@@ -3,8 +3,16 @@
 # Namespace design, differing deliberately from the Minikube reference implementation's 4-way
 # split (observability/logging/tracing/demo-app, see docs/01-minikube-implementation.md §Phase
 # 3): kube-prometheus-stack, Loki, Tempo, and the OTel Collector all install into ONE namespace
-# (`observability.namespace` below). This is a real constraint, not a stylistic choice — checked
-# each chart's own values.yaml before deciding: the `grafana/loki` and
+# — whatever `helm install -n <namespace>` targets (`.Release.Namespace`, used consistently by
+# every template in this chart, including this chart's own dashboards-configmap.yaml/
+# alert-rules.yaml — found via Phase 16's Minikube smoke-test that using a separate
+# `.Values.namespace` value for those two templates instead of `.Release.Namespace` created a
+# split-brain risk: installing with `-n X` without also `--set namespace=X` would land
+# Prometheus/Grafana in X but this chart's own dashboards/alerts in the values.yaml default,
+# silently. Fixed by removing the separate value entirely). Recommended namespace name:
+# `observability` (see README.md's install command) — not enforced by any value, just a
+# convention. This single-namespace collapse is a real constraint, not a stylistic choice —
+# checked each chart's own values.yaml before deciding: the `grafana/loki` and
 # `open-telemetry/opentelemetry-collector` charts both expose a top-level `namespaceOverride`
 # (used below to keep node-exporter and could keep Loki/OTel Collector elsewhere), but
 # `grafana/tempo` has no such key at all — it always deploys into `.Release.Namespace`. Since
@@ -16,8 +24,6 @@
 # observability stack itself; namespace-isolation policy is a platform-team concern applied
 # around it, not bundled into it. See README.md "Design decisions" for the full reasoning,
 # including Promtail (companion install, see below).
-
-namespace: observability
 
 # ---------------------------------------------------------------------------
 # kube-prometheus-stack — Prometheus (2 replicas), Alertmanager (3 replicas), Grafana,
