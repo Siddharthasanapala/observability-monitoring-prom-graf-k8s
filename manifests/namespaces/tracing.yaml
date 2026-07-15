@@ -1,6 +1,11 @@
 # Phase 4: `restricted` Pod Security Standard enforced via namespace labels below.
 # Tempo and the OTel Collector need no host access, so both should run cleanly under
 # `restricted` — no known friction here, unlike observability/logging's node-level agents.
+#
+# Phase 9 fix: Tempo was found OOMKilling repeatedly at its original 512Mi limit under real
+# alert-testing traffic (WAL replay on restart appears to spike well above steady-state usage).
+# Bumped quota ceiling and LimitRange max together so Tempo's own values.yaml sizing bump has
+# room to fit — see manifests/tempo/values.yaml for the container-level change.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -22,9 +27,9 @@ metadata:
 spec:
   hard:
     requests.cpu: "500m"
-    requests.memory: 768Mi
+    requests.memory: 1Gi
     limits.cpu: "1"
-    limits.memory: 1536Mi
+    limits.memory: 2Gi
     persistentvolumeclaims: "3"
     pods: "15"
 ---
@@ -47,4 +52,4 @@ spec:
         memory: 32Mi
       max:
         cpu: 500m
-        memory: 768Mi
+        memory: 1536Mi

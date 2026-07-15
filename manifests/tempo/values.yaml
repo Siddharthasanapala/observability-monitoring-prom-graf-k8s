@@ -24,8 +24,14 @@ fullnameOverride: tempo
 replicas: 1
 
 resources:
-  requests: {cpu: 200m, memory: 256Mi}
-  limits: {cpu: 500m, memory: 512Mi}
+  # 512Mi limit (original Phase 7 sizing) was found OOMKilling Tempo repeatedly during Phase 9's
+  # own alert-rule validation traffic (kubectl describe showed Reason: OOMKilled, exit 137) —
+  # ironically caught by the very PodCrashLooping alert this phase adds. A first bump to 768Mi
+  # still OOMKilled; WAL replay on restart appears to spike well above steady-state usage after
+  # a long test session's worth of accumulated trace blocks. Bumped again with real headroom;
+  # tracing namespace's quota raised to match (manifests/namespaces/tracing.yaml).
+  requests: {cpu: 200m, memory: 512Mi}
+  limits: {cpu: 500m, memory: 1280Mi}
 
 securityContext:
   runAsNonRoot: true

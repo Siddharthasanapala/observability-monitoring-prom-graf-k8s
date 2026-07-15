@@ -1,0 +1,17 @@
+# Phase 9 — dashboards stored as pure, directly-editable JSON files (sample-app-overview.json),
+# wrapped into a ConfigMap by Kustomize rather than hand-embedding JSON inside a YAML data
+# block. Namespace matches where Grafana lives; the sidecar's searchNamespace: ALL (Phase 5
+# default) means this would also work from any other namespace, but co-locating with Grafana
+# keeps it easy to find.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: observability
+
+configMapGenerator:
+  - name: grafana-dashboard-sample-app
+    files:
+      - sample-app-overview.json
+    options:
+      disableNameSuffixHash: true
+      labels:
+        grafana_dashboard: "1"

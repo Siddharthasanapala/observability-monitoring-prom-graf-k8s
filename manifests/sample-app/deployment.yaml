@@ -28,7 +28,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: sample-app
-          image: ghcr.io/siddharthasanapala/observability-sample-app:sha-3bea9eebd6407084b903bb830509a9e621c20ae1
+          image: ghcr.io/siddharthasanapala/observability-sample-app:sha-967c9eea0d6beb290e5153f95e3ab98acdcfab31
           ports:
             - containerPort: 8080
               name: http

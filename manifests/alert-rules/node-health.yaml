@@ -1,0 +1,40 @@
+# `release: kube-prometheus-stack` label required — same ruleSelectorNilUsesHelmValues
+# convention confirmed for ServiceMonitor in Phase 8, verified here against an existing shipped
+# PrometheusRule's labels before writing this.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: node-health
+  namespace: observability
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: node-health
+      rules:
+        - alert: NodeHighCPUUsage
+          expr: |
+            100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 90
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Node {{ $labels.instance }} CPU usage above 90%"
+            description: "Node {{ $labels.instance }} has had >90% CPU utilization for 10 minutes."
+        - alert: NodeHighMemoryUsage
+          expr: |
+            (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Node {{ $labels.instance }} memory usage above 90%"
+            description: "Node {{ $labels.instance }} has had >90% memory utilization for 10 minutes."
+        - alert: NodeNotReady
+          expr: kube_node_status_condition{condition="Ready", status="true"} == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Node {{ $labels.node }} is not Ready"
+            description: "Node {{ $labels.node }} has been NotReady for 5 minutes."
