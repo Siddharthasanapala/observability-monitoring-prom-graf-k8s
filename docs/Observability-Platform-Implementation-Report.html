@@ -1,0 +1,700 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Enterprise Observability &amp; Monitoring on Kubernetes — Implementation Report</title>
+<style>
+  @page { size: A4; margin: 22mm 18mm 20mm 18mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", Calibri, Arial, sans-serif;
+    color: #1c2530;
+    font-size: 10.5pt;
+    line-height: 1.55;
+    margin: 0;
+  }
+  h1, h2, h3, h4 { font-family: "Segoe UI Semibold", "Segoe UI", Calibri, Arial, sans-serif; color: #0b3d63; }
+  h1 { font-size: 20pt; margin: 0 0 6px 0; }
+  h2 {
+    font-size: 15pt; margin: 0 0 10px 0; padding-bottom: 6px;
+    border-bottom: 2px solid #0b3d63; page-break-after: avoid;
+  }
+  h3 { font-size: 12.5pt; margin: 18px 0 6px 0; color: #14507f; page-break-after: avoid; }
+  h4 { font-size: 11pt; margin: 12px 0 4px 0; color: #1c2530; page-break-after: avoid; }
+  p { margin: 6px 0; text-align: justify; }
+  ul, ol { margin: 6px 0; padding-left: 20px; }
+  li { margin: 3px 0; }
+  code, .mono { font-family: "Consolas", "Courier New", monospace; font-size: 9pt; background: #f0f3f6; padding: 1px 4px; border-radius: 3px; color: #0b3d63; }
+  pre {
+    font-family: "Consolas", "Courier New", monospace; font-size: 8.5pt; background: #0b1f33; color: #d6e6f5;
+    padding: 10px 12px; border-radius: 5px; overflow-x: auto; line-height: 1.4; page-break-inside: avoid;
+  }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0 14px 0; font-size: 9.5pt; page-break-inside: avoid; }
+  th { background: #0b3d63; color: #fff; text-align: left; padding: 6px 8px; font-weight: 600; }
+  td { padding: 5px 8px; border-bottom: 1px solid #dce3ea; vertical-align: top; }
+  tr:nth-child(even) td { background: #f5f8fa; }
+  .section { page-break-before: always; }
+  .no-break { page-break-before: auto; }
+  .callout {
+    background: #eef5fb; border-left: 4px solid #0b3d63; padding: 8px 12px; margin: 10px 0; border-radius: 0 4px 4px 0;
+  }
+  .callout.warn { background: #fdf3e7; border-left-color: #b5720b; }
+  .callout.good { background: #eaf7ee; border-left-color: #1e8449; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 8.5pt; font-weight: 600; color: #fff; }
+  .badge.ok { background: #1e8449; }
+  .badge.info { background: #0b3d63; }
+  .small { font-size: 9pt; color: #55606b; }
+  .cover {
+    height: 245mm; display: flex; flex-direction: column; justify-content: center; align-items: center;
+    text-align: center; page-break-after: always;
+  }
+  .cover .tag { color: #14507f; letter-spacing: 3px; font-size: 10pt; font-weight: 600; margin-bottom: 18px; text-transform: uppercase; }
+  .cover h1 { font-size: 30pt; max-width: 620px; line-height: 1.25; }
+  .cover .sub { font-size: 13pt; color: #3a4753; max-width: 560px; margin-top: 10px; }
+  .cover .meta { margin-top: 60px; font-size: 10pt; color: #55606b; }
+  .cover .divider { width: 90px; height: 3px; background: #0b3d63; margin: 26px 0; }
+  .toc { page-break-after: always; }
+  .toc ol { list-style: none; padding-left: 0; counter-reset: toc; }
+  .toc > ol > li { counter-increment: toc; margin: 10px 0; font-size: 11pt; }
+  .toc > ol > li::before { content: counter(toc) ".  "; color: #0b3d63; font-weight: 700; }
+  .toc ol ol { margin-top: 4px; padding-left: 24px; }
+  .toc ol ol li { font-size: 9.5pt; color: #3a4753; counter-increment: none; }
+  .toc ol ol li::before { content: none; }
+  .toc a { color: inherit; text-decoration: none; }
+  .diagram {
+    background: #f7fafc; border: 1px solid #d3dee7; border-radius: 6px; padding: 16px; margin: 12px 0;
+    font-family: "Consolas", "Courier New", monospace; font-size: 8.7pt; page-break-inside: avoid;
+  }
+  .box-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 6px 0; }
+  .box {
+    border: 1.5px solid #0b3d63; border-radius: 5px; padding: 6px 10px; background: #fff; text-align: center;
+    min-width: 110px; font-size: 8.6pt;
+  }
+  .box.accent { background: #0b3d63; color: #fff; }
+  .box.grey { background: #eef2f5; border-color: #9aabb8; color: #3a4753; }
+  .arrow-down { text-align: center; color: #0b3d63; font-size: 13pt; margin: 2px 0; }
+  .arrow-label { text-align: center; color: #55606b; font-size: 7.8pt; margin-top: -4px; }
+  footer.pagefoot { position: running(footer); }
+  .footnote { font-size: 8pt; color: #7a8592; margin-top: 4px; }
+  .kv-table td:first-child { font-weight: 600; color: #0b3d63; width: 34%; }
+</style>
+</head>
+<body>
+
+<!-- ===================== COVER ===================== -->
+<div class="cover">
+  <div class="tag">Platform Engineering &middot; Site Reliability</div>
+  <h1>Enterprise Observability &amp; Monitoring on Kubernetes</h1>
+  <div class="divider"></div>
+  <div class="sub">Implementation Report — Architecture, GitOps Delivery Model, and End-to-End
+    Metrics, Logs &amp; Traces Configuration</div>
+  <div class="meta">
+    Prepared by: Siddhartha Sanapala &nbsp;&middot;&nbsp; siddhartha.sanapala@sailssoftware.com<br>
+    Date: 15 July 2026<br>
+    Reference implementation: Minikube &nbsp;&middot;&nbsp; Packaged for: Google Kubernetes Engine (GKE), Amazon EKS
+  </div>
+</div>
+
+<!-- ===================== TOC ===================== -->
+<div class="toc">
+<h2>Table of Contents</h2>
+<ol>
+  <li><a href="#s1">Executive Summary</a></li>
+  <li><a href="#s2">Objectives and Scope</a></li>
+  <li><a href="#s3">System Architecture</a>
+    <ol>
+      <li>Architecture Diagram</li>
+      <li>Component Inventory</li>
+      <li>Key Architectural Decisions</li>
+    </ol>
+  </li>
+  <li><a href="#s4">Technology Stack and Dependencies</a></li>
+  <li><a href="#s5">GitOps Delivery Model — ArgoCD</a>
+    <ol>
+      <li>Why GitOps</li>
+      <li>The App-of-Apps Pattern</li>
+      <li>How This Improves Kubernetes Maintainability</li>
+      <li>Self-Healing in Practice</li>
+    </ol>
+  </li>
+  <li><a href="#s6">Monitoring and Observability Configuration</a>
+    <ol>
+      <li>Metrics — Prometheus</li>
+      <li>Visualization — Grafana</li>
+      <li>Logging — Loki and Promtail</li>
+      <li>Distributed Tracing — OpenTelemetry and Tempo</li>
+      <li>Alerting — Alertmanager and SLO Rules</li>
+      <li>Cross-Pillar Correlation</li>
+      <li>The Instrumented Reference Workload</li>
+    </ol>
+  </li>
+  <li><a href="#s7">Security and Governance</a></li>
+  <li><a href="#s8">Phased Implementation Process</a></li>
+  <li><a href="#s9">Multi-Cloud Packaging — GKE and EKS</a></li>
+  <li><a href="#s10">Quality Assurance and Validation</a></li>
+  <li><a href="#s11">Operational Lessons and Runbook</a></li>
+  <li><a href="#s12">Conclusion and Recommendations</a></li>
+  <li><a href="#s13">Appendix</a></li>
+</ol>
+</div>
+
+<!-- ===================== 1. EXECUTIVE SUMMARY ===================== -->
+<div class="section" id="s1">
+<h2>1. Executive Summary</h2>
+
+<p>This report documents the design, build, and validation of a production-shaped observability
+platform on Kubernetes, covering the three pillars of observability — <strong>metrics, logs, and
+distributed traces</strong> — together with dashboards, automated alerting, role-based access
+control, network segmentation, and a real instrumented workload used to prove the pipeline
+end-to-end rather than with synthetic test data.</p>
+
+<p>The platform was built hands-on on a locally provisioned Kubernetes cluster (Minikube, sized
+and configured to mirror a real node pool) and is <strong>100% managed through ArgoCD</strong>,
+meaning the Git commit history of this repository is the authoritative change history of the
+cluster. No component was ever deployed by a one-off manual command that isn't also reproducible
+from source control. The same design has been packaged as two cloud-native Helm charts —
+one for Google Kubernetes Engine (GKE), one for Amazon EKS — so the identical architecture can be
+installed on either managed cloud platform with only cloud-specific values (storage class,
+ingress controller, identity federation) changed.</p>
+
+<table>
+<tr><th>Dimension</th><th>Delivered</th></tr>
+<tr><td>Metrics</td><td>Prometheus (2 replicas), kube-state-metrics, node-exporter — 21+ scrape targets, all healthy</td></tr>
+<tr><td>Logs</td><td>Loki + Promtail — cluster-wide log aggregation from every namespace</td></tr>
+<tr><td>Traces</td><td>OpenTelemetry Collector + Tempo — distributed request tracing with real multi-span traces</td></tr>
+<tr><td>Dashboards &amp; Alerts</td><td>Grafana dashboards and Prometheus alert rules defined and versioned as code</td></tr>
+<tr><td>Alerting</td><td>Alertmanager, 3-replica HA cluster, SLO burn-rate and infrastructure health rules</td></tr>
+<tr><td>Change management</td><td>ArgoCD App-of-Apps — 14 Applications, fully GitOps-managed, self-healing</td></tr>
+<tr><td>Security baseline</td><td>Namespace multi-tenancy, least-privilege RBAC, default-deny NetworkPolicy, restricted Pod Security Standards</td></tr>
+<tr><td>Cloud portability</td><td>Two validated Helm charts (GKE, EKS) — linted, schema-validated, and dry-run tested against a live API server</td></tr>
+<tr><td>Validation</td><td>26-check automated end-to-end gate, reproducible via a single script</td></tr>
+</table>
+
+<div class="callout good">
+<strong>Outcome:</strong> a fully reproducible, GitOps-governed observability platform that can be
+torn down and rebuilt from a single script, deployed identically to two major public clouds via
+Helm, and that has been proven — not assumed — to correlate a single user request across metrics,
+logs, and traces.
+</div>
+</div>
+
+<!-- ===================== 2. OBJECTIVES ===================== -->
+<div class="section" id="s2">
+<h2>2. Objectives and Scope</h2>
+<p>The initiative set out to answer a concrete engineering question: <em>what does an
+enterprise-grade observability platform on Kubernetes actually require, beyond installing
+Prometheus and Grafana and calling it done?</em> The scope was defined as:</p>
+<ol>
+<li><strong>Full observability coverage</strong> — not metrics alone, but metrics, logs, and
+traces working together, with a real workload proving correlation between them.</li>
+<li><strong>GitOps as the operating model</strong>, not an add-on — every piece of cluster state,
+from namespaces to alert rules, deployed and changed only through version-controlled
+declarations, reconciled automatically by ArgoCD.</li>
+<li><strong>Enterprise baseline hygiene</strong> — multi-tenant namespace isolation,
+least-privilege RBAC, network segmentation, and pod security hardening, applied from the start
+rather than retrofitted.</li>
+<li><strong>Cloud portability</strong> — the same architecture packaged so it can be installed on
+GKE or EKS without redesign, only cloud-specific configuration substitution.</li>
+<li><strong>Provable correctness</strong> — an automated validation gate that checks the platform
+end-to-end, so "it's done" is a test result, not an opinion.</li>
+</ol>
+<p>Out of scope for this phase: production-grade identity federation (OIDC/IdP integration is
+designed for but not wired to a real identity provider), long-term object storage backends for
+Loki/Tempo (designed as an opt-in overlay, not enabled by default), and a CI/CD pipeline for this
+repository itself. These are called out explicitly in Section&nbsp;12.</p>
+</div>
+
+<!-- ===================== 3. ARCHITECTURE ===================== -->
+<div class="section" id="s3">
+<h2>3. System Architecture</h2>
+
+<h3>3.1 Architecture Diagram</h3>
+<div class="diagram">
+  <div class="box-row">
+    <div class="box grey">GitHub — platform repo<br><span class="small">(this repository, branch: siddhu)</span></div>
+    <div class="box grey">GitHub — sample app repo<br><span class="small">(CI builds &amp; pushes)</span></div>
+    <div class="box grey">GHCR<br><span class="small">(sample app image)</span></div>
+  </div>
+  <div class="arrow-down">&#8595;</div>
+  <div class="arrow-label">polled continuously</div>
+  <div class="box-row">
+    <div class="box accent">ArgoCD — root-app-of-apps<br><span class="small">14 child Applications</span></div>
+  </div>
+  <div class="arrow-down">&#8595;</div>
+  <div class="arrow-label">reconciles / self-heals</div>
+  <div class="box-row">
+    <div class="box">cert-manager<br><span class="small">cert-manager ns</span></div>
+    <div class="box">Prometheus x2<br>Alertmanager x3<br>Grafana<br><span class="small">observability ns</span></div>
+    <div class="box">Loki<br><span class="small">logging ns</span></div>
+    <div class="box">OTel Collector<br>Tempo<br><span class="small">tracing ns</span></div>
+    <div class="box">sample-app<br><span class="small">demo-app ns</span></div>
+    <div class="box">Promtail<br>node-exporter<br><span class="small">kube-system ns</span></div>
+  </div>
+  <div class="arrow-down">&#8595;</div>
+  <div class="arrow-label">metrics scraped &middot; OTLP traces &middot; stdout logs tailed &middot; all correlated in Grafana</div>
+  <div class="box-row">
+    <div class="box grey">Unified view in Grafana: one TraceId links a request's metrics, logs, and trace</div>
+  </div>
+</div>
+<p class="small">Every arrow above except the top "polled continuously" edge represents in-cluster,
+NetworkPolicy-governed traffic. The operator's own <span class="mono">kubectl</span> access is
+limited to two one-time bootstrap commands (Section 5); all other change flows through Git.</p>
+
+<h3>3.2 Component Inventory</h3>
+<table>
+<tr><th>Component</th><th>Namespace</th><th>Source</th><th>Role</th></tr>
+<tr><td>ArgoCD</td><td>argocd</td><td>Vendored install manifest</td><td>GitOps controller — the only component ever applied by hand</td></tr>
+<tr><td>cert-manager</td><td>cert-manager</td><td>Vendored install manifest</td><td>Certificate lifecycle; self-signed issuer on Minikube, cloud-managed certs on GKE/EKS</td></tr>
+<tr><td>kube-prometheus-stack</td><td>observability</td><td>Helm — prometheus-community</td><td>Prometheus, Alertmanager, Grafana, kube-state-metrics, the Prometheus Operator</td></tr>
+<tr><td>Loki + Promtail</td><td>logging / kube-system</td><td>Helm — grafana</td><td>Cluster-wide log aggregation</td></tr>
+<tr><td>Tempo + OTel Collector</td><td>tracing</td><td>Helm — grafana / open-telemetry</td><td>Distributed tracing backend and vendor-neutral trace ingest</td></tr>
+<tr><td>observability-sample-app</td><td>demo-app</td><td>Own repository, own GHCR image</td><td>Real instrumented workload proving the pipeline end-to-end</td></tr>
+<tr><td>node-exporter</td><td>kube-system</td><td>Subchart of kube-prometheus-stack</td><td>Host-level metrics; requires host access incompatible with restricted namespaces</td></tr>
+</table>
+
+<h3>3.3 Key Architectural Decisions</h3>
+
+<h4>Everything through ArgoCD, with exactly one exception</h4>
+<p>The only manifests ever applied directly with <span class="mono">kubectl</span> are ArgoCD's
+own installation and a single root Application that bootstraps the App-of-Apps pattern. Every
+other object in the cluster — namespaces, RBAC, NetworkPolicies, the entire metrics/logs/traces
+stack, dashboards, alert rules, and the sample application — is a child Application reconciled
+automatically from this repository. This is elaborated in Section&nbsp;5.</p>
+
+<h4>Namespace-per-concern multi-tenancy</h4>
+<p>Four tenant namespaces — <span class="mono">observability</span>,
+<span class="mono">logging</span>, <span class="mono">tracing</span>,
+<span class="mono">demo-app</span> — each carry their own ResourceQuota, LimitRange, restricted
+Pod Security Standard labels, and default-deny NetworkPolicy with explicit allow rules.
+<span class="mono">kube-system</span> deliberately opts out of the restricted policy because it
+hosts the two DaemonSets (node-exporter, Promtail) that require genuine host access — a
+constraint identified and documented before either component was deployed, not discovered as a
+surprise mid-build.</p>
+
+<h4>Everything version-pinned, nothing left floating</h4>
+<p>The Kubernetes version, every Helm chart version, and every container image tag are pinned to
+an exact version — never <span class="mono">latest</span> or a floating channel. The sample
+application goes further: its deployment references an immutable commit-SHA image tag, so "what
+is running in the cluster" always maps to one exact, inspectable source commit.</p>
+
+<h4>A CNI that actually enforces policy</h4>
+<p>Minikube's default CNI does not enforce NetworkPolicy at all — this was proven with a live test
+where traffic crossed a default-deny policy that should have blocked it, and didn't. The cluster
+was switched to Calico specifically so NetworkPolicy has real teeth, matching how GKE (Dataplane
+V2) and EKS (Calico / VPC CNI policy support) enforce network policy in production.</p>
+</div>
+
+<!-- ===================== 4. DEPENDENCIES ===================== -->
+<div class="section" id="s4">
+<h2>4. Technology Stack and Dependencies</h2>
+
+<h3>4.1 Platform and Tooling</h3>
+<table>
+<tr><th>Layer</th><th>Technology</th><th>Version</th></tr>
+<tr><td>Container orchestration</td><td>Kubernetes (Minikube)</td><td>v1.35.1, pinned</td></tr>
+<tr><td>Local cluster runtime</td><td>Minikube</td><td>v1.38.1</td></tr>
+<tr><td>CNI / network policy enforcement</td><td>Calico</td><td>Minikube-managed add-on</td></tr>
+<tr><td>Cluster CLI</td><td>kubectl</td><td>v1.35.3</td></tr>
+<tr><td>Package manager</td><td>Helm</td><td>v4.1.4</td></tr>
+<tr><td>GitOps controller</td><td>ArgoCD (server + CLI)</td><td>v3.4.5</td></tr>
+<tr><td>Application runtime (sample app)</td><td>.NET SDK</td><td>10.0.301</td></tr>
+</table>
+
+<h3>4.2 Observability Stack — Helm Chart Dependencies</h3>
+<table>
+<tr><th>Chart</th><th>Repository</th><th>Pinned Version</th><th>Delivers</th></tr>
+<tr><td>kube-prometheus-stack</td><td>prometheus-community</td><td>87.15.2</td><td>Prometheus, Alertmanager, Grafana, kube-state-metrics, Prometheus Operator, node-exporter subchart</td></tr>
+<tr><td>loki</td><td>grafana</td><td>7.0.0</td><td>Log aggregation backend (SingleBinary mode)</td></tr>
+<tr><td>promtail</td><td>grafana</td><td>6.17.1</td><td>Node-level log shipping DaemonSet</td></tr>
+<tr><td>tempo</td><td>grafana</td><td>1.24.4</td><td>Distributed tracing backend (single-binary mode)</td></tr>
+<tr><td>opentelemetry-collector</td><td>open-telemetry</td><td>0.165.0</td><td>Vendor-neutral OTLP trace ingestion gateway</td></tr>
+</table>
+
+<h3>4.3 Why Pinned Dependencies Matter Here</h3>
+<p>Every chart version above is locked in both the GitOps Application manifests and the two
+distributable Helm charts' <span class="mono">Chart.lock</span> files. This is a deliberate
+governance choice: a chart maintainer publishing a new default (as happened during this build,
+when a newer OpenTelemetry Collector chart version silently dropped its default container image)
+cannot change what is running in this platform without a reviewed, version-controlled commit. For
+an enterprise environment, this converts "a third-party dependency changed under us" from a
+production incident into a routine, reviewable pull request.</p>
+</div>
+
+<!-- ===================== 5. ARGOCD / GITOPS ===================== -->
+<div class="section" id="s5">
+<h2>5. GitOps Delivery Model — ArgoCD</h2>
+
+<h3>5.1 Why GitOps</h3>
+<p>Traditional Kubernetes operations rely on operators running <span class="mono">kubectl
+apply</span> or <span class="mono">helm install</span> commands directly against a cluster. This
+is fast to start with and difficult to govern at scale: there is no single place to see what
+changed, when, why, or who approved it, and the live cluster state can silently drift from
+whatever was last documented. GitOps inverts this relationship — <strong>the cluster continuously
+converges toward whatever is declared in a Git repository</strong>, and a controller (here,
+ArgoCD) is responsible for making that true, not a human running commands.</p>
+
+<h3>5.2 The App-of-Apps Pattern</h3>
+<p>This platform uses ArgoCD's "App-of-Apps" pattern: a single root Application
+(<span class="mono">bootstrap/root-app.yaml</span>) watches one directory in this repository
+(<span class="mono">argocd-apps/</span>) and turns every Application manifest found there into a
+live, independently-reconciled child Application. Adding a new platform component is therefore:
+write the desired-state manifests, drop one Application file into
+<span class="mono">argocd-apps/</span>, commit, and push — ArgoCD does the rest, with no new
+tooling and no change to the bootstrap process.</p>
+
+<table>
+<tr><th>Applications under management</th><th>Count</th></tr>
+<tr><td>Platform infrastructure (namespaces, RBAC, NetworkPolicy, security, cert-manager)</td><td>5</td></tr>
+<tr><td>Observability stack (metrics, logging, promtail, tracing, otel-collector)</td><td>5</td></tr>
+<tr><td>Content as code (dashboards, alert rules)</td><td>2</td></tr>
+<tr><td>Workload (sample application)</td><td>1</td></tr>
+<tr><td>Root bootstrap Application</td><td>1</td></tr>
+<tr><td><strong>Total ArgoCD-managed Applications</strong></td><td><strong>14</strong></td></tr>
+</table>
+
+<h3>5.3 How This Improves Kubernetes Maintainability</h3>
+<table>
+<tr><th>Traditional operations</th><th>With ArgoCD (this platform)</th></tr>
+<tr><td>Change history lives in shell history, tickets, or nowhere</td><td>Change history <em>is</em> the Git commit log — every change is a diff, with an author and a message</td></tr>
+<tr><td>Rollback means remembering the previous command</td><td>Rollback is <span class="mono">git revert</span>; ArgoCD reconciles the cluster back automatically</td></tr>
+<tr><td>Configuration drift accumulates silently between deploys</td><td>Drift is corrected automatically — <span class="mono">selfHeal: true</span> reverts any live edit that wasn't pushed to Git, usually within seconds</td></tr>
+<tr><td>"What's actually running?" requires querying the live cluster</td><td>What's running is provably what's in the pinned Git revision ArgoCD reports as Synced</td></tr>
+<tr><td>Multi-cluster consistency requires re-running scripts per cluster, prone to skew</td><td>The same repository can bootstrap any number of clusters identically — deployment is declarative, not procedural</td></tr>
+<tr><td>Access to change production requires broad <span class="mono">kubectl</span> credentials</td><td>Changing production requires only Git write access; cluster-admin credentials can be far more tightly held</td></tr>
+<tr><td>Detecting an unauthorized or accidental manual change is hard</td><td>ArgoCD's diff view and self-heal make any out-of-band change immediately visible and automatically reverted</td></tr>
+</table>
+
+<h3>5.4 Self-Healing in Practice</h3>
+<p>Every Application in this platform runs with
+<span class="mono">automated: {prune: true, selfHeal: true}</span>. In practice this means any
+direct <span class="mono">kubectl</span> or <span class="mono">helm</span> edit made against the
+live cluster — including edits made for urgent troubleshooting — is treated as drift and reverted
+to match the last commit pushed to Git, typically within three to five seconds. This was observed
+repeatedly during hands-on development and is <strong>correct GitOps behavior, not a defect</strong>:
+Git is authoritative by design. The documented technique for safely validating a fix live before
+committing it is to temporarily pause that one Application's sync policy
+(<span class="mono">argocd app set &lt;name&gt; --sync-policy none</span>), verify the fix,
+push it, then restore automated sync. This same behavior is what makes the platform resilient
+against configuration drift in production: a well-intentioned but undocumented manual fix cannot
+quietly become permanent, hidden state.</p>
+
+<div class="callout">
+<strong>Governance benefit:</strong> because RBAC in this platform deliberately excludes
+namespace-admin personas from editing RBAC, ResourceQuota, LimitRange, and NetworkPolicy objects
+directly (Section&nbsp;7), and those same objects are ArgoCD-managed with self-heal, governance
+configuration in this cluster can only change through a reviewed Git commit — not through elevated
+runtime access, and not by accident.
+</div>
+</div>
+
+<!-- ===================== 6. OBSERVABILITY CONFIG ===================== -->
+<div class="section" id="s6">
+<h2>6. Monitoring and Observability Configuration</h2>
+<p>The platform implements all three observability pillars — metrics, logs, and traces — as
+independently scalable components that are unified in a single Grafana pane, and proves the
+unification with a real request rather than a synthetic demonstration.</p>
+
+<h3>6.1 Metrics — Prometheus</h3>
+<p>Deployed via the <span class="mono">kube-prometheus-stack</span> chart with
+<strong>Prometheus running 2 replicas</strong> for availability, backed by persistent storage.
+Metrics sources include:</p>
+<ul>
+<li>Kubernetes control-plane and workload metrics via kube-state-metrics</li>
+<li>Node-level host metrics via node-exporter (DaemonSet, one per node)</li>
+<li>Application metrics scraped directly from the sample workload's <span class="mono">/metrics</span> endpoint — no push gateway in the path</li>
+<li>Prometheus Operator CRDs (<span class="mono">ServiceMonitor</span>, <span class="mono">PrometheusRule</span>) used throughout, so scrape targets and alert rules are themselves Kubernetes objects managed by ArgoCD</li>
+</ul>
+<p>At last validation, all active scrape targets reported healthy (<span class="badge ok">21/21 up</span>).
+Three control-plane targets (kube-scheduler, kube-controller-manager, kube-etcd) are intentionally
+excluded on this Minikube reference environment, as Minikube hardcodes those static pods to bind
+to localhost only — a Minikube-specific limitation, not a design gap; on GKE/EKS these are
+cloud-managed and exposed differently.</p>
+
+<h3>6.2 Visualization — Grafana</h3>
+<p>Grafana is provisioned with persistent storage and pre-wired datasources for Prometheus, Loki,
+and Tempo, so an operator can pivot between metrics, logs, and traces without manually configuring
+a single connection. Dashboards are <strong>defined as code</strong> — raw dashboard JSON
+committed to this repository, wrapped into a ConfigMap via Kustomize, and picked up automatically
+by Grafana's sidecar watcher. A platform-overview dashboard and a sample-application dashboard are
+included; the platform overview generalizes to any workload, while the sample-app dashboard
+demonstrates request-rate, error-rate, and latency panels backed by real traffic.</p>
+
+<h3>6.3 Logging — Loki and Promtail</h3>
+<p>Loki runs in SingleBinary mode — the appropriate topology at this scale, avoiding the
+operational overhead of a multi-component read/write/backend split that would only add complexity
+without a corresponding benefit. Promtail runs as a DaemonSet in
+<span class="mono">kube-system</span> (it requires host path access incompatible with the
+platform's restricted namespaces) and tails every container's stdout across the entire cluster.
+At last validation, Loki held ingested log streams from all active application and platform
+namespaces — <span class="badge ok">every namespace, confirmed via Loki's label API</span>, not
+assumed from configuration alone.</p>
+
+<h3>6.4 Distributed Tracing — OpenTelemetry and Tempo</h3>
+<p>Application traces are exported over OTLP to a dedicated OpenTelemetry Collector, which forwards
+them to Tempo (single-binary mode, persistent storage). A dedicated collector sits in front of
+Tempo by design — even though Tempo itself accepts OTLP directly — so instrumented applications
+depend on a vendor-neutral ingestion point rather than being coupled to Tempo specifically,
+preserving the option to redirect traces to a different backend later without touching application
+code.</p>
+
+<h3>6.5 Alerting — Alertmanager and SLO Rules</h3>
+<p>Alertmanager runs a <strong>3-replica cluster</strong> — deliberately an odd number for real
+gossip-protocol quorum, since two replicas provide no genuine high-availability advantage over
+one. Alert rules are authored as <span class="mono">PrometheusRule</span> custom resources,
+version-controlled alongside everything else, and organized into three groups:</p>
+<ul>
+<li><strong>Node health</strong> — high CPU, high memory, node-not-ready conditions</li>
+<li><strong>Pod crash-loop detection</strong> — cluster-wide, workload-agnostic</li>
+<li><strong>Application SLO</strong> — a burn-rate error-rate alert pattern for the sample
+application, intentionally a simplified single-window model rather than the full multi-window
+Google SRE workbook approach, documented as such so the trade-off is explicit rather than
+implied.</li>
+</ul>
+<p>These rules were validated with <strong>two real fired-and-resolved alerts</strong>, not
+simulated conditions: a deliberately induced failing endpoint drove the SLO error-rate alert from
+pending to firing to resolved, confirmed live in Alertmanager; and the crash-loop alert correctly
+caught a genuine tracing-backend memory issue during load testing, which was then diagnosed and
+fixed — evidence the alerting pipeline detects real problems, not only lab conditions.</p>
+
+<h3>6.6 Cross-Pillar Correlation</h3>
+<p>The platform's central observability claim — that metrics, logs, and traces work together, not
+merely alongside each other — was proven directly: a single real request's trace ID was located in
+both Tempo (as the actual multi-span distributed trace) and Loki (as a structured log line
+carrying the identical trace ID field), while the corresponding business metric incremented
+correctly in Prometheus for the same request. One trace ID, one real request, present and
+correlated across all three pillars simultaneously.</p>
+
+<h3>6.7 The Instrumented Reference Workload</h3>
+<p>An ASP.NET Core (.NET 10) sample application was purpose-built to prove the pipeline rather than
+generate synthetic load. A single API call
+(<span class="mono">GET /api/orders/{id}/enriched</span>) triggers a genuine internal HTTP call
+to a second endpoint, producing a real three-span distributed trace rather than a single isolated
+span. The application exports:</p>
+<ul>
+<li><strong>Metrics</strong> — ASP.NET Core auto-instrumentation plus custom business-event counters, scraped directly by Prometheus</li>
+<li><strong>Traces</strong> — OTLP export to the in-cluster collector, endpoint configured via environment variable, never hardcoded</li>
+<li><strong>Logs</strong> — structured JSON to stdout, enriched with the active trace and span ID, tailed by the same cluster-wide Promtail pipeline as every other workload — deliberately not a second, parallel logging path</li>
+</ul>
+</div>
+
+<!-- ===================== 7. SECURITY ===================== -->
+<div class="section" id="s7">
+<h2>7. Security and Governance</h2>
+
+<h3>7.1 Role-Based Access Control</h3>
+<p>Two personas are defined per tenant namespace, bound to <strong>Kubernetes Groups</strong>
+rather than individual ServiceAccounts, so they can be wired directly into a real identity
+provider's group claims later without any change to these manifests:</p>
+<ul>
+<li><span class="mono">sre-viewer</span> — read-only access, explicitly cannot read Secrets</li>
+<li><span class="mono">observability-admin</span> — full CRUD on workload resources, but
+deliberately excluded from RBAC objects, ResourceQuota, LimitRange, and NetworkPolicy — governance
+configuration remains GitOps-only, not self-service even for a namespace administrator</li>
+</ul>
+
+<h3>7.2 Network Segmentation</h3>
+<p>Every tenant namespace enforces a default-deny-all NetworkPolicy with explicit, narrowly scoped
+allow rules layered on top — traffic is denied by default and permitted only where a documented
+need exists (for example, Grafana querying Prometheus, or Promtail pushing logs into Loki from a
+different namespace). This is enforced at the CNI layer via Calico, confirmed with a live
+positive-and-negative connectivity test rather than assumed from the policy YAML alone.</p>
+
+<h3>7.3 Pod Security Standards</h3>
+<p>The <span class="mono">restricted</span> Pod Security Standard is enforced via namespace labels
+on all four tenant namespaces — no privilege escalation, no root containers, mandatory seccomp
+profiles, dropped Linux capabilities. Components that structurally require host-level access
+(node-exporter, Promtail) are namespaced into <span class="mono">kube-system</span> instead of
+weakening the tenant namespaces' policy, a conflict identified and documented before either
+component was deployed.</p>
+
+<h3>7.4 Certificate Management</h3>
+<p>cert-manager is deployed with a self-signed <span class="mono">ClusterIssuer</span> on the
+Minikube reference environment, proving the certificate-issuance pattern end-to-end. The GKE and
+EKS documentation (Section&nbsp;9) specifies the cloud-managed equivalents — Google Certificate
+Manager with Workload Identity, and AWS Certificate Manager with IRSA — as direct drop-in
+replacements for production use.</p>
+</div>
+
+<!-- ===================== 8. PHASED PROCESS ===================== -->
+<div class="section" id="s8">
+<h2>8. Phased Implementation Process</h2>
+<p>The platform was delivered in ten sequential, independently validated phases. Each phase's
+output was verified against the live cluster before the next began — the table below is a
+condensed record; the full hands-on log, including every real defect found and how it was
+diagnosed and fixed, is maintained in the project's technical documentation set.</p>
+
+<table>
+<tr><th>Phase</th><th>Delivered</th><th>Notable finding</th></tr>
+<tr><td>1. Cluster provisioning</td><td>Sized, version-pinned Minikube cluster with dynamic storage and Calico CNI</td><td>Default CNI does not enforce NetworkPolicy at all — proven live, not assumed</td></tr>
+<tr><td>2. GitOps foundation</td><td>ArgoCD installed; root App-of-Apps bootstrapped</td><td>Large CRDs require server-side apply — a known ArgoCD installation constraint</td></tr>
+<tr><td>3. Namespace &amp; multi-tenancy</td><td>Four tenant namespaces with quotas and limits</td><td>Initial sizing needed two real corrections once live workloads and sync hooks landed</td></tr>
+<tr><td>4. Security &amp; RBAC baseline</td><td>RBAC, NetworkPolicy, Pod Security Standards, cert-manager</td><td>Wildcard RBAC initially over-granted secret access — corrected to explicit per-resource rules</td></tr>
+<tr><td>5. Metrics stack</td><td>Prometheus, Alertmanager, Grafana (kube-prometheus-stack)</td><td>Four distinct chart-default gaps found only by deploying for real (security context, resource sizing, host-access conflicts)</td></tr>
+<tr><td>6. Logging stack</td><td>Loki (SingleBinary) + Promtail</td><td>Chart topology default conflicted with SingleBinary mode; corrected explicitly</td></tr>
+<tr><td>7. Tracing stack</td><td>Tempo + OpenTelemetry Collector</td><td>A recent collector chart version dropped its default image — caught immediately by a failed deploy, not silently</td></tr>
+<tr><td>8. Reference workload</td><td>Instrumented ASP.NET Core sample application, own CI/CD to GHCR</td><td>Multi-span trace design proves distributed propagation, not just span existence</td></tr>
+<tr><td>9. Dashboards, alerts &amp; SLOs</td><td>Dashboards and alert rules as code</td><td>Alerting caught a genuine production-shaped defect (Tempo memory pressure) during its own validation traffic</td></tr>
+<tr><td>10. End-to-end validation</td><td>26-check automated sign-off gate</td><td>Clean run required as a hard gate before any documentation phase could begin</td></tr>
+</table>
+
+<div class="callout">
+Two further phases packaged the platform for distribution: Helm chart authoring and validation for
+GKE and EKS (Section&nbsp;9), and final reference documentation. A reproducible, unattended
+rebuild script (<span class="mono">scripts/complete-setup.sh</span>) chains all of the above end
+to end for future re-provisioning.
+</div>
+</div>
+
+<!-- ===================== 9. MULTI-CLOUD ===================== -->
+<div class="section" id="s9">
+<h2>9. Multi-Cloud Packaging — GKE and EKS</h2>
+<p>The architecture validated on Minikube is packaged as two structurally identical Helm charts —
+<span class="mono">observability-gke</span> and <span class="mono">observability-eks</span> —
+sharing the same four pinned subchart dependencies and the same dashboard/alert-rule content.
+Only genuinely cloud-specific values differ.</p>
+
+<table>
+<tr><th>Value</th><th>GKE chart</th><th>EKS chart</th></tr>
+<tr><td>Persistent volume storage class</td><td>premium-rwo</td><td>gp3</td></tr>
+<tr><td>Grafana Ingress class</td><td>gce</td><td>alb</td></tr>
+<tr><td>Workload identity federation</td><td>Workload Identity (GCP service account annotation)</td><td>IRSA (IAM role ARN annotation)</td></tr>
+<tr><td>Object storage overlay (opt-in)</td><td>Google Cloud Storage backend</td><td>Amazon S3 backend</td></tr>
+</table>
+
+<h3>Validation Performed</h3>
+<p>Neither chart has a real GKE or EKS cluster in this project's scope, so validation used three
+progressively stronger layers:</p>
+<ol>
+<li><strong><span class="mono">helm lint</span></strong> — both charts pass cleanly</li>
+<li><strong>Schema validation</strong> — full rendered output of both charts, with and without
+their object-storage overlay, validated against Kubernetes and Prometheus-Operator CRD schemas:
+<span class="badge ok">130/130 resources valid, 4/4 render variants</span></li>
+<li><strong>Live API server dry-run</strong> — <span class="mono">helm install --dry-run=server</span>
+against the real Minikube API server, which validates against actual installed CRD definitions.
+This step found and fixed a genuine defect: both charts' own templates used a separate namespace
+value inconsistently from every subchart, which could have silently split a real deployment across
+two namespaces under a non-default install namespace. Corrected and re-verified.</li>
+</ol>
+</div>
+
+<!-- ===================== 10. QA ===================== -->
+<div class="section" id="s10">
+<h2>10. Quality Assurance and Validation</h2>
+<p>An automated, repeatable validation script (<span class="mono">scripts/validate.sh</span>)
+serves as the platform's sign-off gate, checking seven categories end-to-end against the live
+cluster rather than against static configuration:</p>
+<table>
+<tr><th>Category</th><th>What is checked</th></tr>
+<tr><td>ArgoCD state</td><td>All 14 Applications report Synced and Healthy</td></tr>
+<tr><td>Metrics</td><td>Every Prometheus scrape target reports healthy</td></tr>
+<tr><td>Logs</td><td>Loki holds ingested streams from all expected namespaces</td></tr>
+<tr><td>Traces</td><td>Tempo returns real recent spans for the reference workload</td></tr>
+<tr><td>Dashboards</td><td>Grafana renders the provisioned dashboard with its expected panels</td></tr>
+<tr><td>RBAC</td><td>Least-privilege behavior verified by impersonation (can/cannot, not configuration inspection)</td></tr>
+<tr><td>NetworkPolicy</td><td>Default-deny policy structurally present in every tenant namespace</td></tr>
+</table>
+<p>All data-plane checks run from inside the cluster (via a pod already on the cluster network)
+rather than through an operator's local port-forward tunnel — a more honest test of what actually
+matters for production (in-cluster service reachability), and immune to the connectivity flakiness
+of long-lived local tunnels. A clean run reports all checks passing before any downstream
+documentation or packaging phase is considered complete.</p>
+</div>
+
+<!-- ===================== 11. LESSONS ===================== -->
+<div class="section" id="s11">
+<h2>11. Operational Lessons and Runbook</h2>
+
+<h4>Self-heal reverts unpushed live edits — by design</h4>
+<p>Any direct cluster edit not yet committed to Git is treated as drift and reverted, typically
+within seconds. This is the correct, intended GitOps behavior, and the documented workaround for
+validating a fix live before committing is to temporarily pause the specific Application's sync
+policy, never to disable self-heal platform-wide.</p>
+
+<h4>Grafana's admin credential can desync from its own Secret once persisted</h4>
+<p>The admin password environment variable only seeds a brand-new database on first boot; once
+persistent storage is enabled, later credential rotations do not automatically propagate to the
+already-existing admin account. The durable fix is resetting the password through Grafana's own
+CLI inside the running pod, which updates the persisted database without disturbing dashboards or
+datasources.</p>
+
+<h4>Third-party Helm chart defaults are a starting point, not a compliance guarantee</h4>
+<p>Every Helm-deployed component in this platform required at least one real, live-deployment
+correction that reading the chart's documentation alone would not have surfaced — a missing
+security field, a resource default colliding with namespace limits, a value nested at the wrong
+key path in an upstream chart's schema (found during this engagement's own live cross-check and
+corrected). The pattern that reliably catches these: inspect a chart's actual rendered defaults
+before writing values, deploy against a real cluster, read the actual error, fix it, and
+re-verify — rather than trusting documentation or a clean template render alone.</p>
+
+<h4>Reproducibility from a clean slate</h4>
+<p>The entire platform — cluster, GitOps controller, and every managed component — can be rebuilt
+unattended from a single script following a Minikube teardown, provided the Git repository already
+holds the desired state. This was a deliberate design goal, not an afterthought: infrastructure
+that can only be recreated by someone who remembers the original manual steps is not truly
+GitOps-managed.</p>
+</div>
+
+<!-- ===================== 12. CONCLUSION ===================== -->
+<div class="section" id="s12">
+<h2>12. Conclusion and Recommendations</h2>
+<p>This engagement delivered a working, provably correlated observability platform — not a
+proof-of-concept dashboard, but a system validated with real traffic, real fired alerts, and a
+real traced request — governed entirely through GitOps, hardened with enterprise-baseline
+security controls, and packaged for deployment on two major public clouds without architectural
+change. The 26-check automated validation gate and the reproducible setup script together mean
+this platform's correctness is a repeatable test result, not a point-in-time claim.</p>
+
+<h3>Recommended Next Steps for Production Adoption</h3>
+<ol>
+<li><strong>Identity federation</strong> — connect the existing RBAC Group bindings to a real
+identity provider (OIDC/SAML), which requires no change to the RBAC manifests themselves, only IdP
+configuration.</li>
+<li><strong>Durable object storage for logs and traces</strong> — enable the already-built GCS/S3
+overlay for Loki and Tempo before retention needs exceed local persistent volume capacity.</li>
+<li><strong>Cloud-managed certificates</strong> — replace the self-signed issuer with Google
+Certificate Manager or AWS Certificate Manager plus Workload Identity/IRSA, both already
+documented as direct replacements.</li>
+<li><strong>Continuous integration for this repository</strong> — add automated
+<span class="mono">helm lint</span>/schema validation on every pull request, extending the manual
+validation already performed to a standing CI gate.</li>
+<li><strong>Formal alert routing</strong> — wire Alertmanager's receivers to real paging/notification
+channels; the alert rules and severities are already defined and proven to fire correctly.</li>
+</ol>
+</div>
+
+<!-- ===================== 13. APPENDIX ===================== -->
+<div class="section" id="s13">
+<h2>13. Appendix</h2>
+
+<h3>13.1 Repository Map</h3>
+<pre>
+Kubernetes-grafana-prometheus/        platform/GitOps content + Helm charts + docs
+├── bootstrap/                        ArgoCD's own install + the App-of-Apps root Application
+├── argocd-apps/                      14 child Applications, one per component
+├── manifests/                        desired-state content every Application points at
+├── charts/                           observability-gke/, observability-eks/
+├── scripts/                          cluster + ArgoCD bootstrap, validation, complete rebuild
+└── docs/                             architecture, phase-by-phase record, cloud docs, chart reference
+
+observability-sample-app/             sibling repository — application code only
+</pre>
+
+<h3>13.2 Glossary</h3>
+<table>
+<tr><th>Term</th><th>Meaning in this context</th></tr>
+<tr><td>GitOps</td><td>Operating model where a Git repository is the single source of truth for desired cluster state, continuously reconciled by an in-cluster controller</td></tr>
+<tr><td>App-of-Apps</td><td>An ArgoCD pattern where one root Application manages a set of child Applications, enabling one bootstrap step to manage an arbitrarily large platform</td></tr>
+<tr><td>Self-heal</td><td>ArgoCD behavior that automatically reverts any live cluster state that doesn't match the last-synced Git commit</td></tr>
+<tr><td>OTLP</td><td>OpenTelemetry Protocol — the vendor-neutral wire format used to export traces (and optionally metrics/logs) from an application to a collector</td></tr>
+<tr><td>Pod Security Standards (PSS)</td><td>Kubernetes-native policy levels (privileged, baseline, restricted) enforced via namespace labels, replacing the deprecated PodSecurityPolicy</td></tr>
+<tr><td>SLO burn-rate alert</td><td>An alert that fires based on how quickly an error budget is being consumed, rather than on a single static threshold</td></tr>
+<tr><td>Workload Identity / IRSA</td><td>Cloud-native mechanisms (GCP / AWS respectively) allowing a Kubernetes ServiceAccount to assume a cloud IAM identity without storing long-lived credentials</td></tr>
+</table>
+
+<p class="footnote">End of report. Prepared from the project's technical documentation set
+(architecture, phase-by-phase implementation record, cloud translation guides, and Helm chart
+reference) maintained in the platform repository.</p>
+</div>
+
+</body>
+</html>
