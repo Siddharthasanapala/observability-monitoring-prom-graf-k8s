@@ -1,0 +1,32 @@
+# Email notification routing for all PrometheusRule alerts in this repo. Deliberately a
+# separate AlertmanagerConfig object rather than an inline `alertmanager.config` block in
+# kube-prometheus-stack/values.yaml — keeps the SMTP auth password out of Git entirely
+# (referenced via a Secret, created out-of-band with `kubectl create secret`, never committed).
+# Picked up automatically via the alertmanagerConfigSelector added in
+# manifests/kube-prometheus-stack/values.yaml (matches on the alertmanagerConfig: email label).
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: email-notifications
+  namespace: observability
+  labels:
+    alertmanagerConfig: email
+spec:
+  route:
+    receiver: email-team
+    groupBy: ["alertname", "severity"]
+    groupWait: 30s
+    groupInterval: 5m
+    repeatInterval: 4h
+  receivers:
+    - name: email-team
+      emailConfigs:
+        - to: "siddhu136projects@gmail.com"
+          from: "JA-AlertManager <gcplearning.2025.sre@gmail.com>"
+          smarthost: "smtp.gmail.com:587"
+          authUsername: "gcplearning.2025.sre@gmail.com"
+          authPassword:
+            name: alertmanager-smtp-secret
+            key: password
+          requireTLS: true
+          sendResolved: true   # also emails when an alert clears, not just when it fires

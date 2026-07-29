@@ -1,0 +1,74 @@
+# Infrastructure resource-pressure alerts, beyond node-health.yaml's CPU/memory/readiness
+# checks — disk, network interface health, and PVC capacity. Same `release: kube-prometheus-stack`
+# label convention as every other PrometheusRule in this repo. All expressions verified against
+# metric names confirmed live in this cluster (node_filesystem_*, node_network_*,
+# kubelet_volume_stats_*) before writing — not guessed from documentation.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: infra-resources
+  namespace: observability
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: infra-resources
+      rules:
+        - alert: HighDiskUsage
+          expr: |
+            (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) * 100 < 15
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Disk on {{ $labels.instance }} ({{ $labels.mountpoint }}) below 15% free"
+            description: "Filesystem {{ $labels.mountpoint }} on {{ $labels.instance }} has had less than 15% free space for 10 minutes."
+
+        - alert: DiskCriticallyFull
+          expr: |
+            (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) * 100 < 5
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Disk on {{ $labels.instance }} ({{ $labels.mountpoint }}) below 5% free"
+            description: "Filesystem {{ $labels.mountpoint }} on {{ $labels.instance }} has had less than 5% free space for 5 minutes — imminent write failures likely."
+
+        - alert: NetworkInterfaceErrors
+          expr: |
+            rate(node_network_receive_errs_total[5m]) > 0 or rate(node_network_transmit_errs_total[5m]) > 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Network errors on {{ $labels.device }} @ {{ $labels.instance }}"
+            description: "Interface {{ $labels.device }} on {{ $labels.instance }} has been reporting send/receive errors for 10 minutes."
+
+        - alert: NetworkInterfaceDown
+          expr: node_network_up{device!~"lo|veth.*|cali.*"} == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Network interface {{ $labels.device }} on {{ $labels.instance }} is down"
+            description: "Physical/primary interface {{ $labels.device }} on {{ $labels.instance }} has been down for 5 minutes."
+
+        - alert: PVCNearFull
+          expr: |
+            (kubelet_volume_stats_available_bytes / kubelet_volume_stats_capacity_bytes) * 100 < 10
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "PVC {{ $labels.persistentvolumeclaim }} in {{ $labels.namespace }} below 10% free"
+            description: "PersistentVolumeClaim {{ $labels.persistentvolumeclaim }} in namespace {{ $labels.namespace }} has less than 10% capacity remaining."
+
+        - alert: PVCCriticallyFull
+          expr: |
+            (kubelet_volume_stats_available_bytes / kubelet_volume_stats_capacity_bytes) * 100 < 3
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "PVC {{ $labels.persistentvolumeclaim }} in {{ $labels.namespace }} below 3% free"
+            description: "PersistentVolumeClaim {{ $labels.persistentvolumeclaim }} in namespace {{ $labels.namespace }} is nearly full — the owning workload will start failing writes imminently."

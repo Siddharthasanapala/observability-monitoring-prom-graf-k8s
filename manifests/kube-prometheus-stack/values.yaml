@@ -83,6 +83,14 @@ prometheus:
 alertmanager:
   alertmanagerSpec:
     replicas: 3   # odd number for gossip-protocol quorum, not 2 — 2 replicas gives no real HA advantage
+    # Email routing: watch for AlertmanagerConfig objects labeled alertmanagerConfig: email,
+    # in any namespace — lets routing/receiver config live as its own GitOps-managed object
+    # (manifests/alert-rules/email-routing.yaml) instead of being embedded in this values file,
+    # so the SMTP auth password (referenced via a Secret, never inlined) never has to touch Git.
+    alertmanagerConfigSelector:
+      matchLabels:
+        alertmanagerConfig: email
+    alertmanagerConfigNamespaceSelector: {}
     resources:
       requests: {cpu: 50m, memory: 64Mi}
       limits: {cpu: 100m, memory: 128Mi}
