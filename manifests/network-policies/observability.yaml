@@ -119,3 +119,27 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: kube-system  # node/kubelet metrics
+---
+# Found live, not anticipated in Phase 4: Alertmanager's email receiver needs to reach an
+# external SMTP relay (smtp.gmail.com:587), which resolves to a public Google IP
+# (192.178.211.109 observed, but Google's mail relay IPs are not fixed/stable enough to pin via
+# a single ipBlock) — every other egress rule in this file deliberately scopes to specific
+# in-cluster destinations, but SMTP relay is inherently external, so this one has to be broader.
+# Scoped as tightly as the requirement allows: only port 587 (SMTP submission), to any
+# destination — not a blanket egress-allow. First real symptom: Alertmanager's own logs showed
+# `dial tcp 192.178.211.109:587: connect: connection timed out` — default-deny-all was silently
+# dropping the connection, not a credential/auth problem.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-smtp-egress
+  namespace: observability
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - {protocol: TCP, port: 587}

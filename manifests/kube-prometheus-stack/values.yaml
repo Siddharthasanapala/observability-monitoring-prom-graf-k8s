@@ -91,6 +91,17 @@ alertmanager:
       matchLabels:
         alertmanagerConfig: email
     alertmanagerConfigNamespaceSelector: {}
+    # Found live, not guessed: the Operator's default matcher strategy (OnNamespace) auto-injects
+    # a `namespace="observability"` matcher onto every route generated from an AlertmanagerConfig
+    # in this namespace — but most alert rules here aggregate away the namespace label (sum(),
+    # avg by (instance)) or carry the *affected workload's* namespace (e.g. "tracing" for a
+    # crash-looping Tempo pod), never "observability" itself, so the matcher never matched and
+    # every alert silently fell through to the default null receiver. `None` disables that
+    # auto-injected constraint so this one AlertmanagerConfig routes every alert regardless of
+    # which namespace it originated from — the actual intent here (one shared email receiver
+    # for the whole platform), not per-namespace-isolated routing.
+    alertmanagerConfigMatcherStrategy:
+      type: None
     resources:
       requests: {cpu: 50m, memory: 64Mi}
       limits: {cpu: 100m, memory: 128Mi}
