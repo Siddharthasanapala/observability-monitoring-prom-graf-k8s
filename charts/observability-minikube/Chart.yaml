@@ -1,0 +1,23 @@
+apiVersion: v2
+name: observability-minikube
+description: >-
+  Platform-governance and content-as-code layer (namespaces, RBAC, NetworkPolicy, a
+  self-signed ClusterIssuer, dashboards, alert rules, and the reference workload) for the
+  observability platform validated in Kubernetes-grafana-prometheus, packaged for a pure
+  Helm-only deployment on Minikube — no GitOps/ArgoCD involved. Deliberately does not bundle
+  Prometheus/Grafana/Loki/Tempo/OTel Collector as chart dependencies: the grafana/tempo chart
+  has no namespaceOverride and always installs into .Release.Namespace, which makes it
+  impossible for one umbrella chart to reproduce this platform's real multi-namespace design
+  (observability/logging/tracing/demo-app) if Tempo is a dependency of it. Those four
+  components are installed as their own separate `helm install` releases instead — see
+  scripts/setup-minikube-helm.sh for the full, correctly-ordered sequence.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+home: https://github.com/Siddharthasanapala/observability-monitoring-prom-graf-k8s
+keywords:
+  - observability
+  - prometheus
+  - grafana
+  - minikube
+  - helm

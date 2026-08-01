@@ -1,0 +1,165 @@
+# Four tenant namespaces, faithfully ported from the validated multi-namespace design —
+# each with its own ResourceQuota, LimitRange, and restricted Pod Security Standard.
+# Namespace sizing weighted toward `observability` (heaviest workload: HA Prometheus/
+# Grafana/Alertmanager). kube-system and cert-manager are platform namespaces, not tenant
+# namespaces, and are created by their own respective installs (Minikube ships kube-system;
+# the cert-manager Helm chart creates its own namespace).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability
+  labels:
+    app.kubernetes.io/part-of: observability-platform
+    observability.io/component: metrics
+    observability.io/tenant: platform-team
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: observability-quota
+  namespace: observability
+spec:
+  hard:
+    requests.cpu: "2"
+    requests.memory: 4Gi
+    limits.cpu: "4"
+    limits.memory: 7Gi
+    persistentvolumeclaims: "10"
+    pods: "30"
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: observability-limits
+  namespace: observability
+spec:
+  limits:
+    - type: Container
+      defaultRequest: {cpu: 200m, memory: 256Mi}
+      default: {cpu: 500m, memory: 512Mi}
+      min: {cpu: 50m, memory: 64Mi}
+      max: {cpu: "2", memory: 4Gi}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: logging
+  labels:
+    app.kubernetes.io/part-of: observability-platform
+    observability.io/component: logs
+    observability.io/tenant: platform-team
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: logging-quota
+  namespace: logging
+spec:
+  hard:
+    requests.cpu: "750m"
+    requests.memory: 1Gi
+    limits.cpu: "1500m"
+    limits.memory: 2Gi
+    persistentvolumeclaims: "5"
+    pods: "20"
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: logging-limits
+  namespace: logging
+spec:
+  limits:
+    - type: Container
+      defaultRequest: {cpu: 100m, memory: 128Mi}
+      default: {cpu: 250m, memory: 256Mi}
+      min: {cpu: 25m, memory: 32Mi}
+      max: {cpu: "1", memory: 1Gi}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tracing
+  labels:
+    app.kubernetes.io/part-of: observability-platform
+    observability.io/component: traces
+    observability.io/tenant: platform-team
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: tracing-quota
+  namespace: tracing
+spec:
+  hard:
+    requests.cpu: "500m"
+    requests.memory: 1Gi
+    limits.cpu: "1"
+    limits.memory: 2Gi
+    persistentvolumeclaims: "3"
+    pods: "15"
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: tracing-limits
+  namespace: tracing
+spec:
+  limits:
+    - type: Container
+      defaultRequest: {cpu: 100m, memory: 128Mi}
+      default: {cpu: 250m, memory: 256Mi}
+      min: {cpu: 25m, memory: 32Mi}
+      max: {cpu: 500m, memory: 1536Mi}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo-app
+  labels:
+    app.kubernetes.io/part-of: observability-platform
+    observability.io/component: sample-workload
+    observability.io/tenant: app-team
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: demo-app-quota
+  namespace: demo-app
+spec:
+  hard:
+    requests.cpu: "250m"
+    requests.memory: 256Mi
+    limits.cpu: "500m"
+    limits.memory: 512Mi
+    persistentvolumeclaims: "2"
+    pods: "10"
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: demo-app-limits
+  namespace: demo-app
+spec:
+  limits:
+    - type: Container
+      defaultRequest: {cpu: 50m, memory: 64Mi}
+      default: {cpu: 100m, memory: 128Mi}
+      min: {cpu: 25m, memory: 32Mi}
+      max: {cpu: 250m, memory: 256Mi}

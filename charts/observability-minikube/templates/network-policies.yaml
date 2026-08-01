@@ -1,0 +1,320 @@
+# Default-deny-all per tenant namespace with explicit, narrow allow rules — faithfully ported
+# from the validated design. {{ .Values.networkPolicy.minikubeNodeIP }} is used wherever a rule
+# must target the Minikube node's real IP rather than a ClusterIP: on this cluster, Calico
+# evaluates egress policy AFTER kube-proxy's ClusterIP -> node-IP DNAT, so apiserver/kubelet/
+# node-exporter reachability rules only work when they target the post-DNAT node IP directly
+# (confirmed by live testing both forms during the original build — only the node-IP form
+# actually succeeded).
+
+# ============================== observability ==============================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: observability
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: observability
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-node-metrics-egress
+  namespace: observability
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - ipBlock: {cidr: "{{ .Values.networkPolicy.minikubeNodeIP }}/32"}
+      ports:
+        - {protocol: TCP, port: 8443}   # kube-apiserver
+        - {protocol: TCP, port: 9100}   # node-exporter
+        - {protocol: TCP, port: 10250}  # kubelet (/metrics, /metrics/cadvisor, /metrics/probes)
+        - {protocol: TCP, port: 10249}  # kube-proxy
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-intra-namespace
+  namespace: observability
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+  ingress: [{from: [{podSelector: {}}]}]
+  egress: [{to: [{podSelector: {}}]}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ui-ingress-from-ingress-nginx
+  namespace: observability
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: ingress-nginx}}
+      ports: [{protocol: TCP, port: 3000}, {protocol: TCP, port: 9090}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-scrape-egress
+  namespace: observability
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {observability.io/tenant: platform-team}}
+        - namespaceSelector: {matchLabels: {observability.io/tenant: app-team}}
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+---
+# Alertmanager's email receiver needs to reach an external SMTP relay — the only egress rule
+# in this whole chart that targets the public internet rather than a specific in-cluster
+# destination, and deliberately scoped to just port 587 (SMTP submission), not a blanket allow.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-smtp-egress
+  namespace: observability
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to: [{ipBlock: {cidr: "0.0.0.0/0"}}]
+      ports: [{protocol: TCP, port: 587}]
+
+# ============================== logging ==============================
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: logging
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: logging
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-apiserver-egress
+  namespace: logging
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to: [{ipBlock: {cidr: "{{ .Values.networkPolicy.minikubeNodeIP }}/32"}}]
+      ports: [{protocol: TCP, port: 8443}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-intra-namespace
+  namespace: logging
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+  ingress: [{from: [{podSelector: {}}]}]
+  egress: [{to: [{podSelector: {}}]}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-query-ingress-from-observability
+  namespace: logging
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {observability.io/component: metrics}}
+      ports: [{protocol: TCP, port: 3100}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-push-ingress-from-promtail
+  namespace: logging
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+      ports: [{protocol: TCP, port: 3100}]
+
+# ============================== tracing ==============================
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: tracing
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: tracing
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-apiserver-egress
+  namespace: tracing
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to: [{ipBlock: {cidr: "{{ .Values.networkPolicy.minikubeNodeIP }}/32"}}]
+      ports: [{protocol: TCP, port: 8443}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-intra-namespace
+  namespace: tracing
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+  ingress: [{from: [{podSelector: {}}]}]
+  egress: [{to: [{podSelector: {}}]}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-otlp-ingest-from-demo-app
+  namespace: tracing
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {observability.io/tenant: app-team}}
+      ports: [{protocol: TCP, port: 4317}, {protocol: TCP, port: 4318}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-query-ingress-from-observability
+  namespace: tracing
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {observability.io/component: metrics}}
+      ports: [{protocol: TCP, port: 3200}]
+
+# ============================== demo-app ==============================
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: demo-app
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: demo-app
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-apiserver-egress
+  namespace: demo-app
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to: [{ipBlock: {cidr: "{{ .Values.networkPolicy.minikubeNodeIP }}/32"}}]
+      ports: [{protocol: TCP, port: 8443}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-intra-namespace
+  namespace: demo-app
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+  ingress: [{from: [{podSelector: {}}]}]
+  egress: [{to: [{podSelector: {}}]}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-http-ingress-from-ingress-nginx-and-prometheus
+  namespace: demo-app
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: ingress-nginx}}
+        - namespaceSelector: {matchLabels: {observability.io/component: metrics}}
+      ports: [{protocol: TCP, port: 8080}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-otlp-egress-to-tracing
+  namespace: demo-app
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {observability.io/component: traces}}
+      ports: [{protocol: TCP, port: 4317}, {protocol: TCP, port: 4318}]

@@ -1,0 +1,18 @@
+{{- if .Values.dashboards.enabled }}
+# Dashboard JSON bundled as a real file in this chart (dashboards/sample-app-overview.json,
+# same content Kustomize wraps in the GitOps path) and injected via .Files.Get — the source of
+# truth stays a plain, directly-editable JSON file, not JSON hand-embedded in YAML.
+# grafana_dashboard: "1" is what the kube-prometheus-stack Grafana sidecar watches for
+# (sidecar.dashboards.enabled/label/labelValue are chart defaults — searchNamespace: ALL means
+# this is picked up regardless of which namespace it's created in).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-sample-app
+  namespace: observability
+  labels:
+    grafana_dashboard: "1"
+data:
+  sample-app-overview.json: |-
+{{ .Files.Get "dashboards/sample-app-overview.json" | indent 4 }}
+{{- end }}

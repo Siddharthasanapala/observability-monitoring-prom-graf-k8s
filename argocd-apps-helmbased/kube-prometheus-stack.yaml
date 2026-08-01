@@ -1,0 +1,48 @@
+# Helm-based flow — metrics stack, GitOps-managed via bootstrap/root-app-helmbased.yaml.
+# Multi-source Application: the Helm chart comes straight from the prometheus-community
+# repo (pinned version), values come from this git repo (aliased $values below) — so the
+# chart itself is never vendored/forked, only our configuration is. Identical chart/version/
+# values-file choice to argocd-apps/kube-prometheus-stack.yaml (the raw-manifest flow's
+# sibling Application) — this file exists separately so the two flows stay fully independent.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: 87.15.2
+      helm:
+        valueFiles:
+          - $values/manifests/kube-prometheus-stack/values.yaml
+    - repoURL: https://github.com/Siddharthasanapala/observability-monitoring-prom-graf-k8s.git
+      targetRevision: siddhu
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+  # Grafana subchart auto-generates a random admin-password on every `helm template` render
+  # (we deliberately don't pin one — no secrets in git). Without this, ArgoCD sees a perpetual
+  # diff on that Secret and its Deployment's checksum/secret annotation, staying permanently
+  # OutOfSync and rotating the password on every sync.
+  ignoreDifferences:
+    - group: ""
+      kind: Secret
+      name: kube-prometheus-stack-grafana
+      jsonPointers:
+        - /data/admin-password
+    - group: apps
+      kind: Deployment
+      name: kube-prometheus-stack-grafana
+      jqPathExpressions:
+        - '.spec.template.metadata.annotations."checksum/secret"'

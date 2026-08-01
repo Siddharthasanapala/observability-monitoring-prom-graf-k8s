@@ -1,0 +1,39 @@
+# values.yaml — observability-minikube
+# Most content here is deliberately NOT parameterized away from the validated design (RBAC
+# rules, NetworkPolicy allow-rules, namespace quotas) — these are security-relevant and were
+# tuned against real, live-tested failures (see the parent repo's docs/01-minikube-implementation.md).
+# Only genuinely environment-variable or optional-toggle values live here.
+
+networkPolicy:
+  # Minikube's node InternalIP — Calico on this cluster evaluates egress policy AFTER
+  # kube-proxy's ClusterIP -> node-IP DNAT, so API-server-reachability rules must target the
+  # node's real IP, not the apiserver Service ClusterIP. This is genuinely environment-specific
+  # (a fresh `minikube start` can, though usually doesn't, get a different IP) — the install
+  # script queries it live with `kubectl get nodes -o jsonpath=...` and passes it via --set,
+  # rather than trusting this hardcoded fallback.
+  minikubeNodeIP: "192.168.49.2"
+
+sampleApp:
+  image:
+    repository: ghcr.io/siddharthasanapala/observability-sample-app
+    tag: "sha-967c9eea0d6beb290e5153f95e3ab98acdcfab31"
+  replicas: 1
+
+dashboards:
+  enabled: true
+
+alertRules:
+  nodeHealth:
+    enabled: true
+  podCrashLoops:
+    enabled: true
+  sampleAppSlo:
+    enabled: true
+
+emailAlerts:
+  # Opt-in — see templates/email-routing.yaml for the Secret you must create first.
+  enabled: false
+  to: ""
+  from: ""
+  smarthost: "smtp.gmail.com:587"
+  authUsername: ""

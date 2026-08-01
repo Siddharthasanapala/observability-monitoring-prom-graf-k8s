@@ -1,0 +1,30 @@
+# Helm-based flow — App-of-Apps root Application.
+# Sibling of bootstrap/root-app.yaml (the raw-manifest flow's root), kept as a fully separate
+# Application/tree so the two deployment methods never collide on the same cluster. This is the
+# single manifest applied by hand (ArgoCD's own bootstrap seed) by scripts/setup-minikube-helm.sh;
+# everything under argocd-apps-helmbased/ is then picked up automatically from Git and reconciled
+# by ArgoCD — no further `helm install`/`kubectl apply` for cluster state from this point on.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-app-of-apps-helmbased
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Siddharthasanapala/observability-monitoring-prom-graf-k8s.git
+    targetRevision: siddhu
+    path: argocd-apps-helmbased
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

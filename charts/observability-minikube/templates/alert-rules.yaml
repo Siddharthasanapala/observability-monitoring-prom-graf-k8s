@@ -1,0 +1,129 @@
+# PrometheusRule CRs — require the Prometheus Operator CRDs to already exist, which is why
+# the install script installs kube-prometheus-stack BEFORE this chart. All groups carry
+# `release: kube-prometheus-stack` since the chart's ruleSelector only watches that label
+# (verified against the chart's own shipped rules before writing these).
+{{- if .Values.alertRules.nodeHealth.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: node-health
+  namespace: observability
+  labels: {release: kube-prometheus-stack}
+spec:
+  groups:
+    - name: node-health
+      rules:
+        - alert: NodeHighCPUUsage
+          expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 90
+          for: 10m
+          labels: {severity: warning}
+          annotations:
+            summary: "Node {{ "{{" }} $labels.instance {{ "}}" }} CPU usage above 90%"
+        - alert: NodeHighMemoryUsage
+          expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
+          for: 10m
+          labels: {severity: warning}
+          annotations:
+            summary: "Node {{ "{{" }} $labels.instance {{ "}}" }} memory usage above 90%"
+        - alert: NodeNotReady
+          expr: kube_node_status_condition{condition="Ready", status="true"} == 0
+          for: 5m
+          labels: {severity: critical}
+          annotations:
+            summary: "Node {{ "{{" }} $labels.node {{ "}}" }} is not Ready"
+---
+{{- end }}
+{{- if .Values.alertRules.podCrashLoops.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: pod-crashloops
+  namespace: observability
+  labels: {release: kube-prometheus-stack}
+spec:
+  groups:
+    - name: pod-crashloops
+      rules:
+        - alert: PodCrashLooping
+          expr: increase(kube_pod_container_status_restarts_total[15m]) > 3
+          for: 2m
+          labels: {severity: warning}
+          annotations:
+            summary: "Pod {{ "{{" }} $labels.namespace {{ "}}" }}/{{ "{{" }} $labels.pod {{ "}}" }} is crash-looping"
+---
+{{- end }}
+{{- if .Values.alertRules.sampleAppSlo.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: sample-app-slo
+  namespace: observability
+  labels: {release: kube-prometheus-stack}
+spec:
+  groups:
+    - name: sample-app-slo
+      rules:
+        - record: sampleapp:http_requests:error_rate5m
+          expr: |
+            sum(rate(http_server_request_duration_seconds_count{job="observability-sample-app",http_response_status_code=~"5.."}[5m]))
+            /
+            sum(rate(http_server_request_duration_seconds_count{job="observability-sample-app"}[5m]))
+        - alert: SampleAppHighErrorRate
+          expr: sampleapp:http_requests:error_rate5m > 0.05
+          for: 2m
+          labels: {severity: warning}
+          annotations:
+            summary: "observability-sample-app 5xx error rate above 5%"
+        - alert: SampleAppCriticalErrorRate
+          expr: sampleapp:http_requests:error_rate5m > 0.20
+          for: 2m
+          labels: {severity: critical}
+          annotations:
+            summary: "observability-sample-app 5xx error rate above 20% (SLO burn)"
+---
+{{- end }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: infra-resources
+  namespace: observability
+  labels: {release: kube-prometheus-stack}
+spec:
+  groups:
+    - name: infra-resources
+      rules:
+        - alert: HighDiskUsage
+          expr: (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) * 100 < 15
+          for: 10m
+          labels: {severity: warning}
+          annotations:
+            summary: "Disk on {{ "{{" }} $labels.instance {{ "}}" }} below 15% free"
+        - alert: PVCNearFull
+          expr: (kubelet_volume_stats_available_bytes / kubelet_volume_stats_capacity_bytes) * 100 < 10
+          for: 10m
+          labels: {severity: warning}
+          annotations:
+            summary: "PVC {{ "{{" }} $labels.persistentvolumeclaim {{ "}}" }} below 10% free"
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: kubernetes-workloads
+  namespace: observability
+  labels: {release: kube-prometheus-stack}
+spec:
+  groups:
+    - name: kubernetes-workloads
+      rules:
+        - alert: DeploymentReplicasMismatch
+          expr: kube_deployment_spec_replicas != kube_deployment_status_replicas_available
+          for: 15m
+          labels: {severity: warning}
+          annotations:
+            summary: "Deployment {{ "{{" }} $labels.deployment {{ "}}" }} in {{ "{{" }} $labels.namespace {{ "}}" }} not at desired replica count"
+        - alert: PodImagePullBackOff
+          expr: kube_pod_container_status_waiting_reason{reason="ImagePullBackOff"} == 1
+          for: 5m
+          labels: {severity: critical}
+          annotations:
+            summary: "Pod {{ "{{" }} $labels.pod {{ "}}" }} in {{ "{{" }} $labels.namespace {{ "}}" }} cannot pull its image"

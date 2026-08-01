@@ -1,0 +1,10 @@
+# Minimal cert-manager proof pattern — a self-signed ClusterIssuer, the simplest possible
+# demonstration that cert-manager can issue certificates cluster-wide. Requires cert-manager's
+# own CRDs to already exist, which is why the install script installs the cert-manager Helm
+# chart BEFORE this chart — see scripts/setup-minikube-helm.sh.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-issuer
+spec:
+  selfSigned: {}

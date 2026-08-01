@@ -1,0 +1,35 @@
+{{- if .Values.emailAlerts.enabled }}
+# Opt-in — disabled by default because it needs a real SMTP credential, which this chart never
+# invents or stores. Create the Secret yourself before enabling:
+#   kubectl create secret generic alertmanager-smtp-secret -n observability \
+#     --from-literal=password='<app-password>'
+# Also requires kube-prometheus-stack's values.yaml to set alertmanagerConfigMatcherStrategy.type: None
+# (the Operator otherwise auto-injects a namespace matcher that most alert rules here never
+# carry, since their aggregations drop the namespace label — found live, documented in
+# manifests/kube-prometheus-stack/values.yaml).
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: email-notifications
+  namespace: observability
+  labels: {alertmanagerConfig: email}
+spec:
+  route:
+    receiver: email-team
+    groupBy: ["alertname", "severity"]
+    groupWait: 30s
+    groupInterval: 5m
+    repeatInterval: 4h
+  receivers:
+    - name: email-team
+      emailConfigs:
+        - to: "{{ .Values.emailAlerts.to }}"
+          from: "{{ .Values.emailAlerts.from }}"
+          smarthost: "{{ .Values.emailAlerts.smarthost }}"
+          authUsername: "{{ .Values.emailAlerts.authUsername }}"
+          authPassword:
+            name: alertmanager-smtp-secret
+            key: password
+          requireTLS: true
+          sendResolved: true
+{{- end }}

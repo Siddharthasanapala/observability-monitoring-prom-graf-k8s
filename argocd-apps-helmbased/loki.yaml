@@ -1,0 +1,30 @@
+# Helm-based flow — Loki, GitOps-managed via bootstrap/root-app-helmbased.yaml.
+# Multi-source Application: Helm chart from the grafana repo (pinned version), values from
+# this git repo (aliased $values) — same pattern as kube-prometheus-stack.yaml.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://grafana.github.io/helm-charts
+      chart: loki
+      targetRevision: 7.0.0
+      helm:
+        valueFiles:
+          - $values/manifests/loki/values.yaml
+    - repoURL: https://github.com/Siddharthasanapala/observability-monitoring-prom-graf-k8s.git
+      targetRevision: siddhu
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: logging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

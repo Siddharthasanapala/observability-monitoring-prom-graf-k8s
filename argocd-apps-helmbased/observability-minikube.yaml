@@ -1,0 +1,48 @@
+# Helm-based flow — this repo's own chart (namespaces, RBAC, NetworkPolicy, ClusterIssuer,
+# dashboards, alert rules, the reference workload), GitOps-managed via
+# bootstrap/root-app-helmbased.yaml. Local chart source: ArgoCD auto-detects it as Helm from
+# the Chart.yaml at this path and applies the chart's own values.yaml defaults — no valueFiles
+# override needed.
+#
+# sync-wave "1" + retry: this chart's PrometheusRule/ServiceMonitor CRs need the Prometheus
+# Operator CRDs (from kube-prometheus-stack.yaml, wave 0) and its ClusterIssuer needs
+# cert-manager's CRDs (also wave 0) to exist first. Unlike a plain `helm install` sequence,
+# ArgoCD's automated retry/selfHeal means a transient first-sync failure here (CRDs not yet
+# registered) self-resolves on the next reconciliation — same pattern already proven in
+# argocd-apps/security.yaml for the equivalent cert-manager-CRD dependency.
+#
+# networkPolicy.minikubeNodeIP is intentionally left at the chart's static default
+# (192.168.49.2) rather than injected per-run: ArgoCD only ever reconciles against what's
+# committed to Git, so a value only known after a fresh `minikube start` genuinely can't be
+# threaded through here without either committing a per-run file change or patching the live
+# Application object (which selfHeal would revert on the next sync). This is the same accepted
+# limitation already documented in manifests/network-policies/observability.yaml for the
+# raw-manifest flow — correct for the common case, environment-specific if it ever changes.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: observability-minikube
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Siddharthasanapala/observability-monitoring-prom-graf-k8s.git
+    targetRevision: siddhu
+    path: charts/observability-minikube
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 3m
